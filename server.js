@@ -16,10 +16,9 @@ const app      = express();
 const PORT     = process.env.PORT || 5000;
 const STATIC   = path.join(__dirname, 'dastak-clone');
 
-// Default route → services.html (the active demo page)
-// Must be declared BEFORE express.static so it takes priority over index.html
+// Root → homepage
 app.get('/', (req, res) => {
-  res.sendFile(path.join(STATIC, 'services.html'));
+  res.sendFile(path.join(STATIC, 'index.html'));
 });
 
 // ═══════════════════════════════════════════════════════════════
