@@ -1458,9 +1458,20 @@
     return data;
   }
 
+  // Always mint a FRESH session, even across page navigations.
+  //
+  // Reusing the saved token looks cheaper but breaks the demo two ways:
+  //  1. The Uplift agent worker ends its session when the only human
+  //     participant disconnects, so reconnecting with the old token drops
+  //     us into a room with no agent in it — mic works, UI says
+  //     connected, nothing ever answers.
+  //  2. Reconnecting with the same participant identity races the old
+  //     connection's teardown and LiveKit typically drops one of them.
+  //
+  // We lose the agent's memory of earlier turns, but pushPageContext
+  // re-briefs it with the full guided-flow state, which is what actually
+  // matters for resuming the guidance.
   async function getOrResumeSession() {
-    const saved = loadSavedSession();
-    if (saved && saved.token && saved.wsUrl) return saved;
     return createNewSession();
   }
 
@@ -1663,6 +1674,12 @@
 
     const micBtn = document.getElementById('maryam-mic-btn');
     console.log('[Maryam] Getting session...');
+
+    // Read the "the agent navigated us here" flag BEFORE creating the new
+    // session — createNewSession() overwrites the stored session object,
+    // which is also how the flag gets consumed exactly once.
+    const previous = loadSavedSession();
+    const arrivedViaAgentNav = !!(previous && previous.agentNavigated);
 
     const session = await getOrResumeSession();
     console.log('[Maryam] Session ready. wsUrl:', session.wsUrl ? 'ok' : 'MISSING');
@@ -1867,12 +1884,8 @@
 
     // Tell the agent what page it's on — critical after guided
     // navigation so it resumes the flow instead of guessing.
-    const saved = loadSavedSession();
-    const arrivedViaAgentNav = !!(saved && saved.agentNavigated);
-    if (arrivedViaAgentNav) {
-      // Consume the flag so a manual reload later doesn't auto-reconnect.
-      saveSession({ ...saved, agentNavigated: false });
-    }
+    // (arrivedViaAgentNav was captured before the fresh session replaced
+    // the stored one, which consumed the flag.)
     // Small delay so the remote agent participant is fully joined.
     await delay(1500);
     await pushPageContext(
