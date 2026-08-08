@@ -16,7 +16,10 @@ const app      = express();
 const PORT     = process.env.PORT || 5000;
 const STATIC   = path.join(__dirname, 'dastak-clone');
 
-const UPLIFT_BASE    = 'https://api.upliftai.org/v1';
+// Region is env-driven so it can be flipped from Replit Secrets alone.
+// Default is the US endpoint (verified to resolve this assistant ID).
+// Singapore (lower latency from Pakistan): ap-southeast-1.api.upliftai.org/v1
+const UPLIFT_BASE    = process.env.UPLIFT_BASE || 'https://api.upliftai.org/v1';
 const ASSISTANT_ID   = 'e9311394-097b-49c6-a206-fef2569dce2c';
 const UPLIFT_API_KEY = process.env.UPLIFT_API_KEY;
 
@@ -71,4 +74,6 @@ app.use(express.static(STATIC));
 
 app.listen(PORT, () => {
   console.log(`Dastak Voice Agent running on http://localhost:${PORT}`);
+  console.log(`[server] Uplift base URL: ${UPLIFT_BASE}` +
+    (process.env.UPLIFT_BASE ? ' (from UPLIFT_BASE env)' : ' (default)'));
 });

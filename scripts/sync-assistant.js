@@ -10,7 +10,8 @@
 // Requires: UPLIFT_API_KEY env var.
 
 const ASSISTANT_ID = 'e9311394-097b-49c6-a206-fef2569dce2c';
-const BASE = 'https://api.upliftai.org/v1';
+// Keep in step with server.js — same env var, same US default.
+const BASE = process.env.UPLIFT_BASE || 'https://api.upliftai.org/v1';
 const API_KEY = process.env.UPLIFT_API_KEY;
 const DRY_RUN = process.argv.includes('--dry-run');
 
@@ -176,6 +177,7 @@ async function api(method, path, body) {
 }
 
 (async () => {
+  console.log('Uplift base URL:', BASE);
   console.log('Fetching assistant config...');
   const assistant = await api('GET', `/realtime-assistants/${ASSISTANT_ID}`);
   const config = assistant.config;
