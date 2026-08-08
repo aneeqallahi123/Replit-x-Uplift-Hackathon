@@ -1,0 +1,173 @@
+# Maryam Agent — Fix: User Audio Not Triggering Agent Response
+
+## Symptom
+Maryam speaks successfully. When the user speaks back, 
+Maryam does not respond. The conversation is one-sided.
+
+## Root causes being fixed
+
+1. Mic audio constraints not set — browser default mic capture 
+   may have echo cancellation too aggressive, or noise suppression 
+   removing the user's voice entirely, or wrong sample rate for 
+   LiveKit's VAD
+
+2. No diagnostic logging — impossible to tell if user audio is 
+   reaching LiveKit at all without active speaker events logged
+
+3. No VAD activity feedback — user gets no visual indication 
+   that Maryam is hearing them, so there is no way to know if 
+   the problem is mic capture or agent-side processing
+
+4. Potential issue: setMicrophoneEnabled(true) uses browser 
+   default audio constraints. LiveKit needs specific constraints 
+   for reliable VAD detection with a remote agent.
+
+---
+
+## Fix 1 — Set explicit audio constraints on mic capture
+
+Replace:
+  await room.localParticipant.setMicrophoneEnabled(true);
+
+With:
+  await room.localParticipant.setMicrophoneEnabled(true, {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl:  true,
+    sampleRate:       48000,
+    channelCount:     1,
+  });
+
+This ensures the browser sends clean mono audio at 48kHz 
+which is what LiveKit's server-side VAD expects. The 
+defaults vary by browser and device and can cause VAD 
+to miss speech entirely.
+
+---
+
+## Fix 2 — Add active speaker logging for diagnosis
+
+Inside connectAndRegisterTools(), after room.connect(), 
+add this event listener:
+
+  room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged,
+    (speakers) => {
+      const names = speakers.map(s => 
+        s.isLocal ? 'USER' : ('MARYAM:' + s.identity)
+      );
+      if (names.length > 0) {
+        console.log('[Maryam] Speaking:', names.join(', '));
+      }
+    }
+  );
+
+This logs to console whenever anyone is detected as speaking.
+When the user speaks, "USER" should appear.
+When Maryam speaks, "MARYAM:..." should appear.
+If "USER" never appears when speaking — mic audio is not 
+reaching LiveKit at all.
+If "USER" appears but Maryam still does not respond — 
+the issue is server-side VAD or agent configuration.
+
+---
+
+## Fix 3 — Add visual speaking indicator
+
+Add a visual pulse on the status bubble when the user 
+is detected as speaking, so the citizen knows the 
+agent is hearing them:
+
+In the ActiveSpeakersChanged handler, also update the UI:
+
+  room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged,
+    (speakers) => {
+      const userSpeaking  = speakers.some(s => s.isLocal);
+      const agentSpeaking = speakers.some(s => !s.isLocal);
+      const micBtn = document.getElementById('maryam-mic-btn');
+
+      if (userSpeaking) {
+        setStatus('سن رہی ہوں...', true);
+        if (micBtn) micBtn.style.boxShadow = 
+          '0 0 0 8px rgba(22,123,56,0.3)';
+      } else if (agentSpeaking) {
+        setStatus('مریم بول رہی ہے...', true);
+        if (micBtn) micBtn.style.boxShadow = 
+          '0 0 0 8px rgba(22,123,56,0.1)';
+      } else {
+        setStatus('', false);
+        if (micBtn) micBtn.style.boxShadow = 
+          '0 4px 16px rgba(22,123,56,0.5)';
+      }
+    }
+  );
+
+This is critical for the demo — the citizen can see 
+"سن رہی ہوں" (I am listening) appear when they speak, 
+confirming Maryam is receiving their voice.
+
+---
+
+## Fix 4 — Add connection quality logging
+
+After room.connect(), add:
+
+  room.on(LivekitClient.RoomEvent.ConnectionStateChanged,
+    (state) => {
+      console.log('[Maryam] Connection state:', state);
+    }
+  );
+
+  room.on(LivekitClient.RoomEvent.Disconnected, (reason) => {
+    console.warn('[Maryam] Disconnected:', reason);
+    maryamConnected = false;
+    const micBtn = document.getElementById('maryam-mic-btn');
+    if (micBtn) {
+      micBtn.textContent    = '⚠️';
+      micBtn.style.background = '#e53e3e';
+      micBtn.title = 'کنکشن ٹوٹ گیا — دوبارہ کلک کریں';
+    }
+    setStatus('کنکشن ٹوٹ گیا — دوبارہ کلک کریں', true);
+  });
+
+---
+
+## Fix 5 — Ensure local audio track is actually published
+
+After setMicrophoneEnabled(), add a check to confirm 
+the track was published:
+
+  await room.localParticipant.setMicrophoneEnabled(true, {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl:  true,
+    sampleRate:       48000,
+    channelCount:     1,
+  });
+
+  // Confirm mic track is live
+  const micTrack = room.localParticipant
+    .getTrackPublication(LivekitClient.Track.Source.Microphone);
+
+  if (micTrack && micTrack.track) {
+    console.log('[Maryam] Mic track published successfully. 
+      Muted:', micTrack.isMuted);
+  } else {
+    console.error('[Maryam] Mic track NOT published — 
+      user audio will not reach Maryam');
+  }
+
+---
+
+## Do not change anything else
+
+Only these additions inside connectAndRegisterTools():
+1. Audio constraints on setMicrophoneEnabled()
+2. ActiveSpeakersChanged event handler with console log + UI
+3. ConnectionStateChanged + Disconnected event handlers
+4. Mic track publication check after enable
+
+All tool handlers, pointer engine, SITE_CONFIG, session 
+management, HTML file script tags — unchanged.
+
+Commit: "Fix user audio: constraints + speaking indicators"
+Push to GitHub.

@@ -590,6 +590,48 @@
     await room.connect(session.wsUrl, session.token);
     console.log('[Maryam] Room connected on:', getCurrentPageKey());
 
+    // ── Diagnostics: connection state + disconnect handling ──
+    room.on(LivekitClient.RoomEvent.ConnectionStateChanged, (state) => {
+      console.log('[Maryam] Connection state:', state);
+    });
+
+    room.on(LivekitClient.RoomEvent.Disconnected, (reason) => {
+      console.warn('[Maryam] Disconnected:', reason);
+      maryamConnected = false;
+      const btn = document.getElementById('maryam-mic-btn');
+      if (btn) {
+        btn.textContent = '⚠️';
+        btn.style.background = '#e53e3e';
+        btn.title = 'کنکشن ٹوٹ گیا — دوبارہ کلک کریں';
+      }
+      setStatus('کنکشن ٹوٹ گیا — دوبارہ کلک کریں', true);
+    });
+
+    // ── Speaking indicators: log + visual feedback ───────────
+    room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, (speakers) => {
+      const names = speakers.map((s) =>
+        s.isLocal ? 'USER' : 'MARYAM:' + s.identity
+      );
+      if (names.length > 0) {
+        console.log('[Maryam] Speaking:', names.join(', '));
+      }
+
+      const userSpeaking = speakers.some((s) => s.isLocal);
+      const agentSpeaking = speakers.some((s) => !s.isLocal);
+      const btn = document.getElementById('maryam-mic-btn');
+
+      if (userSpeaking) {
+        setStatus('سن رہی ہوں...', true);
+        if (btn) btn.style.boxShadow = '0 0 0 8px rgba(22,123,56,0.3)';
+      } else if (agentSpeaking) {
+        setStatus('مریم بول رہی ہے...', true);
+        if (btn) btn.style.boxShadow = '0 0 0 8px rgba(22,123,56,0.1)';
+      } else {
+        setStatus('', false);
+        if (btn) btn.style.boxShadow = '0 4px 16px rgba(22,123,56,0.5)';
+      }
+    });
+
     // ── Attach incoming audio (Maryam's voice) ──────────────
     room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
       if (track.kind === LivekitClient.Track.Kind.Audio) {
@@ -616,8 +658,27 @@
     });
 
     // ── Enable mic (user gesture context — safe here) ───────
-    await room.localParticipant.setMicrophoneEnabled(true);
+    // Explicit constraints: clean mono 48kHz — what LiveKit's
+    // server-side VAD expects. Browser defaults vary and can
+    // cause VAD to miss speech entirely.
+    await room.localParticipant.setMicrophoneEnabled(true, {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      sampleRate: 48000,
+      channelCount: 1,
+    });
     console.log('[Maryam] Microphone enabled');
+
+    // Confirm mic track is actually published
+    const micTrack = room.localParticipant.getTrackPublication(
+      LivekitClient.Track.Source.Microphone
+    );
+    if (micTrack && micTrack.track) {
+      console.log('[Maryam] Mic track published successfully. Muted:', micTrack.isMuted);
+    } else {
+      console.error('[Maryam] Mic track NOT published — user audio will not reach Maryam');
+    }
 
     maryamConnected = true;
 
