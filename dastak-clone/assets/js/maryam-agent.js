@@ -520,31 +520,55 @@
         position: fixed;
         bottom: 24px;
         right: 24px;
-        width: 64px;
-        height: 64px;
+        width: 68px;
+        height: 68px;
         border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        padding: 0;
+        display: block;
         background: linear-gradient(145deg, var(--primary-color, #0d6b39), #0a5a30);
         border: 3px solid #ffffff;
-        color: white;
-        font-size: 24px;
-        line-height: 1;
         cursor: pointer;
         z-index: 99998;
         box-shadow: 0 10px 26px rgba(13,107,57,0.45);
-        transition: transform 0.2s ease, background 0.3s ease, box-shadow 0.3s ease;
+        transition: transform 0.2s ease, box-shadow 0.3s ease;
       }
       #maryam-mic-btn:hover {
         transform: scale(1.07);
       }
-      #maryam-mic-btn.connected {
-        background: linear-gradient(145deg, var(--primary-color, #0d6b39), #0a5a30);
-        box-shadow: 0 10px 26px rgba(13,107,57,0.45), 0 0 0 4px rgba(245,187,24,0.28);
+      #maryam-avatar-img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+        object-position: top center;
+        pointer-events: none;
+      }
+      #maryam-mic-badge {
+        position: absolute;
+        right: -3px;
+        bottom: -3px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: var(--primary-color, #0d6b39);
+        border: 2px solid #ffffff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12.5px;
+        line-height: 1;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+        transition: background 0.3s ease;
+        pointer-events: none;
+      }
+      #maryam-mic-btn.connected #maryam-mic-badge {
+        background: var(--primary-color, #0d6b39);
+      }
+      #maryam-mic-btn.connecting #maryam-mic-badge {
+        background: #7c847c;
       }
       #maryam-mic-btn.connecting {
-        background: linear-gradient(145deg, #9aa39a, #7c847c);
         animation: maryamConnecting 1.1s ease-in-out infinite;
       }
       #maryam-mic-btn.listening {
@@ -553,16 +577,43 @@
       #maryam-mic-btn.speaking {
         box-shadow: 0 10px 26px rgba(13,107,57,0.45), 0 0 0 10px rgba(13,107,57,0.20);
       }
-      #maryam-mic-btn.muted {
-        background: linear-gradient(145deg, #c9971a, #a3780e);
+      #maryam-mic-btn.muted #maryam-mic-badge {
+        background: #a3780e;
+      }
+      #maryam-mic-btn.error #maryam-mic-badge {
+        background: #a83232;
       }
       #maryam-mic-btn.error {
-        background: linear-gradient(145deg, #d9534f, #a83232);
         box-shadow: 0 10px 26px rgba(217,83,79,0.4);
       }
       @keyframes maryamConnecting {
         0%, 100% { box-shadow: 0 10px 26px rgba(13,107,57,0.25); }
         50%      { box-shadow: 0 10px 32px rgba(13,107,57,0.55); }
+      }
+      #maryam-label {
+        position: fixed;
+        bottom: 24px;
+        right: 102px;
+        height: 68px;
+        display: flex;
+        align-items: center;
+        z-index: 99997;
+        pointer-events: none;
+      }
+      #maryam-label span {
+        background: #ffffff;
+        color: var(--primary-color, #0d6b39);
+        font-family: 'Manrope', 'Outfit', sans-serif;
+        font-size: 12.5px;
+        font-weight: 700;
+        padding: 7px 14px;
+        border-radius: 999px;
+        white-space: nowrap;
+        border: 1px solid rgba(13,107,57,0.10);
+        box-shadow: 0 8px 20px rgba(13,107,57,0.18), 0 2px 6px rgba(0,0,0,0.06);
+      }
+      @media (max-width: 480px) {
+        #maryam-label { display: none; }
       }
       .field-highlight {
         outline: 2.5px solid #167B38 !important;
@@ -571,6 +622,14 @@
       }
     `;
     document.head.appendChild(style);
+  }
+
+  // The mic button's face is the avatar photo — the state icon (mic,
+  // hourglass, mute, warning) lives in the small badge at its corner
+  // instead of replacing the photo.
+  function setMicIcon(btn, icon) {
+    const badge = btn && btn.querySelector('#maryam-mic-badge');
+    if (badge) badge.textContent = icon;
   }
 
   function injectPointerElements() {
@@ -584,10 +643,17 @@
     status.id = 'maryam-status';
     document.body.appendChild(status);
 
+    const label = document.createElement('div');
+    label.id = 'maryam-label';
+    label.innerHTML = '<span>Your AI assisted guide</span>';
+    document.body.appendChild(label);
+
     const micBtn = document.createElement('button');
     micBtn.id = 'maryam-mic-btn';
     micBtn.title = 'Talk to Maryam';
-    micBtn.textContent = '🎤';
+    micBtn.innerHTML =
+      '<img id="maryam-avatar-img" src="assets/images/maryam-avatar.png" alt="Your AI assisted guide">' +
+      '<span id="maryam-mic-badge">🎤</span>';
     micBtn.classList.add('connecting');
     document.body.appendChild(micBtn);
   }
@@ -2057,7 +2123,7 @@
       maryamConnected = false;
       const btn = document.getElementById('maryam-mic-btn');
       if (btn) {
-        btn.textContent = '⚠️';
+        setMicIcon(btn, '⚠️');
         btn.classList.remove('connected', 'listening', 'speaking');
         btn.classList.add('error');
         btn.title = 'Connection lost — click to reconnect';
@@ -2148,7 +2214,7 @@
     if (micBtn) {
       micBtn.classList.remove('connecting', 'error', 'muted');
       micBtn.classList.add('connected');
-      micBtn.textContent = '🎤';
+      setMicIcon(micBtn, '🎤');
       micBtn.disabled = false;
       micBtn.title = 'Maryam is listening — click to mute';
     }
@@ -2198,7 +2264,7 @@
     if (!micBtn) return;
 
     micBtn.classList.remove('connecting');
-    micBtn.textContent = '🎤';
+    setMicIcon(micBtn, '🎤');
     micBtn.title = 'Talk to Maryam';
 
     micBtn.addEventListener('click', async () => {
@@ -2206,7 +2272,7 @@
       if (maryamConnected && maryamRoom) {
         const isOn = maryamRoom.localParticipant.isMicrophoneEnabled;
         await maryamRoom.localParticipant.setMicrophoneEnabled(!isOn);
-        micBtn.textContent = !isOn ? '🎤' : '🔇';
+        setMicIcon(micBtn, !isOn ? '🎤' : '🔇');
         micBtn.classList.toggle('muted', isOn);
         setStatus(!isOn ? 'Mic on' : 'Mic off', true);
         await delay(1500);
@@ -2216,7 +2282,7 @@
 
       // First click — connect (this IS the user gesture)
       micBtn.disabled = true;
-      micBtn.textContent = '⏳';
+      setMicIcon(micBtn, '⏳');
       micBtn.classList.add('connecting');
       setStatus('Connecting to Maryam...', true);
 
@@ -2226,7 +2292,7 @@
         console.error('[Maryam] Connection failed:', err);
         micBtn.classList.remove('connecting');
         micBtn.classList.add('error');
-        micBtn.textContent = '⚠️';
+        setMicIcon(micBtn, '⚠️');
         micBtn.disabled = false;
         setStatus('Connection failed — click to retry', true);
         // A stale saved session may be the cause — clear it so the
@@ -2255,7 +2321,7 @@
         setStatus('Reconnecting to Maryam...', true);
         const micBtn = document.getElementById('maryam-mic-btn');
         if (micBtn) {
-          micBtn.textContent = '⏳';
+          setMicIcon(micBtn, '⏳');
           micBtn.classList.add('connecting');
         }
         try {
@@ -2270,7 +2336,7 @@
           } catch (err2) {
             console.error('[Maryam] Fresh-session auto-reconnect also failed:', err2);
             if (micBtn) {
-              micBtn.textContent = '⚠️';
+              setMicIcon(micBtn, '⚠️');
               micBtn.classList.remove('connecting');
               micBtn.classList.add('error');
             }
