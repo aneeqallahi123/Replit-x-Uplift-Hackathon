@@ -1779,4 +1779,12 @@
       }, 800);
     }
   });
+
+  // Debug handle — lets us drive the flow from the browser console during the demo build.
+  window.__maryam = {
+    get room() { return maryamRoom; },
+    get connected() { return maryamConnected; },
+    loadFlow, saveFlow, clearFlow, pushPageContext,
+    executeCurrentFlowStep, getCaptchaState, buildLiveContext, FLOW_STEPS,
+  };
 })();
