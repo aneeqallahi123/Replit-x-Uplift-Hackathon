@@ -1,0 +1,708 @@
+# Dastak Voice Agent — Full Integration: Track A + Track B Combined
+
+## What this prompt does
+
+This is the final integration step. Track A (Maryam voice agent via 
+Uplift AI + LiveKit) is ready. Track B (animated pointer navigation) 
+is already built. This prompt combines both into one cohesive system.
+
+The result:
+- Maryam speaks to the citizen in Urdu via Uplift AI realtime assistant
+- The citizen speaks back — Maryam understands and guides them
+- Track B's animated green pointer replaces Track A's basic red dot
+- The pointer moves to elements on the real website and waits for 
+  the citizen to click — Maryam told them what to click and the 
+  pointer shows them exactly where it is
+- Form fields are filled automatically by voice once the citizen 
+  confirms each value verbally
+- The session stays alive across all three page navigations
+
+---
+
+## Files to create or modify
+
+### CREATE: dastak-clone/assets/js/maryam-agent.js
+
+This is a NEW file. It is the combined Track A + Track B integration.
+It replaces the old voice-agent.js concept entirely.
+Do NOT create a separate voice-agent.js — everything lives here.
+
+The file must do the following in order:
+
+---
+
+#### SECTION 1 — Configuration
+
+```javascript
+const ASSISTANT_ID = 'e9311394-097b-49c6-a206-fef2569dce2c';
+const SESSION_STORAGE_KEY = 'maryam_session';
+const UPLIFT_BASE = 'https://api.upliftai.org/v1';
+```
+
+---
+
+#### SECTION 2 — Site config (embedded, no network call needed)
+
+Embed the SITE_CONFIG object EXACTLY as follows — do not change 
+any selectors, field IDs, labels, or structure:
+
+```javascript
+const SITE_CONFIG = {
+  homepage: {
+    page: 'homepage',
+    notes: "The DLIMS service category card here is not wired to 
+    navigate anywhere (href='#'). Do not point_to_element on it 
+    — call navigate_to_page('services') instead.",
+  },
+  services: {
+    page: 'services',
+    elements: [
+      {
+        action: 'select_service',
+        element_id: '[data-service-key="renewal_driving_license"]',
+        label: 'Renewal of Regular License',
+        interaction: 'point_to_element',
+        result: 'Expands a panel with two apply-mode options below the service row',
+      },
+      {
+        action: 'select_apply_mode_self_service',
+        element_id: '.apply_online',
+        label: 'Self Service',
+        interaction: 'point_to_element',
+        note: "class name says apply_online but this IS the Self Service option",
+      },
+      {
+        action: 'select_apply_mode_doorstep',
+        element_id: '.apply_self',
+        label: 'Doorstep Service',
+        interaction: 'point_to_element',
+        note: "class name says apply_self but this IS the Doorstep Service option",
+      },
+      {
+        action: 'proceed_to_application',
+        element_id: '.btn-apply-service',
+        label: 'Apply',
+        interaction: 'point_to_element',
+        requires: 'an apply mode must be selected first',
+        result: 'Navigates to apply.html',
+      },
+    ],
+  },
+  apply: {
+    page: 'apply',
+    service: 'renewal_driving_license',
+    formType: 'renewal-license',
+    fields: [
+      { order: 1, field_id: 'fCnic',         label: 'CNIC',
+        type: 'text',   validation: 'exactly 13 digits, no dashes' },
+      { order: 2, field_id: 'fLicenseNo',    label: 'License Number',
+        type: 'text',   validation: 'non-empty' },
+      { order: 3, field_id: 'fIssuanceDate', label: 'License Issuance Date',
+        type: 'date',   validation: 'real past date' },
+      { order: 4, field_id: 'fDuration',     label: 'Renewal Duration',
+        type: 'select',
+        options: ['For 1 Year','For 2 Years','For 3 Years','For 4 Years','For 5 Years'] },
+      { order: 5, field_id: 'fPossession',   label: 'Is Old License in Possession',
+        type: 'select',
+        options: ['Yes, in my possession',"No, it's lost"] },
+    ],
+    postFieldSteps: [
+      { step: 'captcha',
+        element_id: '.math-captcha-wrapper',
+        description: 'Math captcha — user solves directly on screen.' },
+      { step: 'submit',
+        element_id: '#btnSubmitApplication',
+        description: 'Final submit button.' },
+    ],
+  },
+};
+```
+
+---
+
+#### SECTION 3 — Page detection
+
+```javascript
+function getCurrentPageKey() {
+  const path = window.location.pathname;
+  if (path.endsWith('services.html')) return 'services';
+  if (path.endsWith('apply.html'))    return 'apply';
+  return 'homepage';
+}
+```
+
+---
+
+#### SECTION 4 — Animated pointer engine (Track B upgrade)
+
+This replaces Track A's basic red dot with Track B's smooth 
+animated green circle. Inject styles once into <head>:
+
+```javascript
+function injectPointerStylesOnce() {
+  if (document.getElementById('maryam-pointer-style')) return;
+  const style = document.createElement('style');
+  style.id = 'maryam-pointer-style';
+  style.textContent = `
+    #maryam-pointer {
+      position: fixed;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 3px solid #167B38;
+      box-shadow: 0 0 0 4px rgba(22,123,56,0.15),
+                  0 0 16px rgba(22,123,56,0.4);
+      pointer-events: none;
+      display: none;
+      z-index: 99999;
+      transition: left 0.5s cubic-bezier(0.25,0.46,0.45,0.94),
+                  top  0.5s cubic-bezier(0.25,0.46,0.45,0.94);
+    }
+    #maryam-pointer.active { display: block; }
+    #maryam-pointer.pulse {
+      animation: maryamPulse 0.4s ease-out;
+    }
+    @keyframes maryamPulse {
+      0%   { transform: scale(1);   }
+      50%  { transform: scale(1.5); }
+      100% { transform: scale(1);   }
+    }
+    #maryam-status {
+      position: fixed;
+      bottom: 90px;
+      right: 24px;
+      background: #167B38;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-family: 'Outfit', sans-serif;
+      display: none;
+      max-width: 280px;
+      text-align: right;
+      z-index: 99998;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    #maryam-mic-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: #167B38;
+      border: none;
+      color: white;
+      font-size: 22px;
+      cursor: pointer;
+      z-index: 99998;
+      box-shadow: 0 4px 16px rgba(22,123,56,0.5);
+      transition: transform 0.2s, background 0.2s;
+    }
+    #maryam-mic-btn:hover { 
+      transform: scale(1.08); 
+      background: #125e2e; 
+    }
+    #maryam-mic-btn.connected {
+      background: #167B38;
+    }
+    #maryam-mic-btn.connecting {
+      background: #999;
+      animation: maryamConnecting 1s infinite;
+    }
+    @keyframes maryamConnecting {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.5; }
+    }
+    .field-highlight {
+      outline: 2.5px solid #167B38 !important;
+      background-color: #f1f8f3 !important;
+      transition: all 0.3s;
+    }
+  `;
+  document.head.appendChild(style);
+}
+```
+
+Create the pointer div and mic button by injecting into body:
+
+```javascript
+function injectPointerElements() {
+  if (document.getElementById('maryam-pointer')) return;
+
+  const pointer = document.createElement('div');
+  pointer.id = 'maryam-pointer';
+  document.body.appendChild(pointer);
+
+  const status = document.createElement('div');
+  status.id = 'maryam-status';
+  document.body.appendChild(status);
+
+  const micBtn = document.createElement('button');
+  micBtn.id = 'maryam-mic-btn';
+  micBtn.title = 'مریم سے بات کریں';
+  micBtn.textContent = '🎤';
+  micBtn.classList.add('connecting');
+  document.body.appendChild(micBtn);
+}
+```
+
+Pointer movement function — moves the green circle to any element:
+
+```javascript
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function setStatus(text, show) {
+  const el = document.getElementById('maryam-status');
+  if (!el) return;
+  el.textContent = text;
+  el.style.display = (show === false) ? 'none' : 'block';
+}
+
+async function movePointerTo(el) {
+  if (!el) return;
+  const pointer = document.getElementById('maryam-pointer');
+  if (!pointer) return;
+
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  await delay(500);
+
+  const rect = el.getBoundingClientRect();
+  const x = rect.left + rect.width  / 2 - 22;
+  const y = rect.top  + rect.height / 2 - 22;
+
+  pointer.style.left = x + 'px';
+  pointer.style.top  = y + 'px';
+  pointer.classList.add('active');
+  await delay(500);
+}
+
+function triggerPulse() {
+  const pointer = document.getElementById('maryam-pointer');
+  if (!pointer) return;
+  pointer.classList.remove('pulse');
+  void pointer.offsetWidth;
+  pointer.classList.add('pulse');
+}
+
+function hidePointer() {
+  const pointer = document.getElementById('maryam-pointer');
+  if (pointer) pointer.classList.remove('active');
+}
+```
+
+---
+
+#### SECTION 5 — waitForElement utility
+
+```javascript
+function waitForElement(selector, timeoutMs) {
+  timeoutMs = timeoutMs || 8000;
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(selector);
+    if (existing) return resolve(existing);
+    const observer = new MutationObserver(() => {
+      const el = document.querySelector(selector);
+      if (el) { observer.disconnect(); resolve(el); }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    setTimeout(() => {
+      observer.disconnect();
+      reject(new Error('Element not found: ' + selector));
+    }, timeoutMs);
+  });
+}
+```
+
+---
+
+#### SECTION 6 — Tool handler implementations
+
+These are the four functions that Maryam calls via RPC.
+They use the animated pointer engine from Section 4.
+
+```javascript
+function handleGetPageContext() {
+  const pageKey = getCurrentPageKey();
+  return SITE_CONFIG[pageKey] || { page: pageKey, notes: 'No config.' };
+}
+
+function handleNavigateToPage(payload) {
+  const urlMap = {
+    services: 'services.html',
+    apply:    'apply.html',
+    homepage: 'index.html'
+  };
+  const url = urlMap[payload.page];
+  if (!url) return { navigated: false, error: 'Unknown page: ' + payload.page };
+  window.location.href = url;
+  return { navigated: true, target: url };
+}
+
+async function handlePointToElement(payload) {
+  const selector = payload.element_id;
+
+  try {
+    const el = await waitForElement(selector);
+
+    // Move the animated green pointer to the element
+    await movePointerTo(el);
+    triggerPulse();
+
+    // Show Urdu status
+    const labelMap = {};
+    const pageConfig = SITE_CONFIG[getCurrentPageKey()];
+    if (pageConfig && pageConfig.elements) {
+      pageConfig.elements.forEach(e => { labelMap[e.element_id] = e.label; });
+    }
+    const label = labelMap[selector] || selector;
+    setStatus('یہاں کلک کریں: ' + label);
+
+    // Wait for the CITIZEN to click the element (not auto-click)
+    // This is the key difference from old hardcoded version:
+    // Maryam POINTS and WAITS — the citizen does the clicking
+    return await new Promise((resolve) => {
+      function cleanup() {
+        window.removeEventListener('scroll', reposition, true);
+        window.removeEventListener('resize', reposition);
+        el.removeEventListener('click', onClick, true);
+        hidePointer();
+        setStatus('', false);
+      }
+
+      function reposition() {
+        const rect = el.getBoundingClientRect();
+        const pointer = document.getElementById('maryam-pointer');
+        if (!pointer) return;
+        pointer.style.left = (rect.left + rect.width/2  - 22) + 'px';
+        pointer.style.top  = (rect.top  + rect.height/2 - 22) + 'px';
+      }
+
+      window.addEventListener('scroll', reposition, true);
+      window.addEventListener('resize', reposition);
+
+      function onClick() {
+        cleanup();
+        resolve({ clicked: true, element_id: selector });
+      }
+
+      el.addEventListener('click', onClick, true);
+    });
+
+  } catch (err) {
+    console.warn('[Maryam] point_to_element failed:', selector, err.message);
+    return { clicked: false, error: err.message };
+  }
+}
+
+async function handleFillField(payload) {
+  const fieldId   = payload.field_name;
+  const value     = payload.value;
+
+  try {
+    const el = await waitForElement('#' + fieldId);
+
+    // Move pointer to the field
+    await movePointerTo(el);
+    triggerPulse();
+
+    // Highlight the field
+    el.classList.add('field-highlight');
+
+    // Typewriter fill — character by character
+    el.value = '';
+    el.focus();
+    for (const char of String(value)) {
+      el.value += char;
+      el.dispatchEvent(new Event('input',  { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+      await delay(55);
+    }
+    el.dispatchEvent(new Event('blur', { bubbles: true }));
+
+    await delay(300);
+    el.classList.remove('field-highlight');
+    hidePointer();
+
+    return { field_name: fieldId, value: value, filled: true };
+
+  } catch (err) {
+    console.warn('[Maryam] fill_field failed:', fieldId, err.message);
+    return { filled: false, error: err.message };
+  }
+}
+```
+
+---
+
+#### SECTION 7 — Session management
+
+```javascript
+function saveSession(session) {
+  sessionStorage.setItem(
+    SESSION_STORAGE_KEY,
+    JSON.stringify({ ...session, savedAt: Date.now() })
+  );
+}
+
+function loadSavedSession() {
+  const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
+async function createNewSession() {
+  const res = await fetch(
+    `${UPLIFT_BASE}/realtime-assistants/${ASSISTANT_ID}/createPublicSession`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participantName: 'Citizen' }),
+    }
+  );
+  if (!res.ok) throw new Error('Session creation failed: ' + res.status);
+  const data = await res.json();
+  saveSession(data);
+  return data;
+}
+
+async function getOrResumeSession() {
+  const saved = loadSavedSession();
+  if (saved && saved.token && saved.wsUrl) return saved;
+  return createNewSession();
+}
+```
+
+---
+
+#### SECTION 8 — LiveKit connection and RPC registration
+
+```javascript
+async function connectAndRegisterTools() {
+  if (typeof LivekitClient === 'undefined') {
+    console.error('[Maryam] LivekitClient not loaded.');
+    return;
+  }
+
+  const micBtn = document.getElementById('maryam-mic-btn');
+
+  try {
+    const session = await getOrResumeSession();
+    const room = new LivekitClient.Room();
+
+    // Register all four RPC tools
+    room.localParticipant.registerRpcMethod(
+      'get_page_context',
+      async () => JSON.stringify(handleGetPageContext())
+    );
+
+    room.localParticipant.registerRpcMethod(
+      'navigate_to_page',
+      async (data) => {
+        const payload = JSON.parse(data.payload);
+        const args = payload.arguments
+          ? payload.arguments.raw_arguments : payload;
+        return JSON.stringify(handleNavigateToPage(args));
+      }
+    );
+
+    room.localParticipant.registerRpcMethod(
+      'point_to_element',
+      async (data) => {
+        const payload = JSON.parse(data.payload);
+        const args = payload.arguments
+          ? payload.arguments.raw_arguments : payload;
+        return JSON.stringify(await handlePointToElement(args));
+      }
+    );
+
+    room.localParticipant.registerRpcMethod(
+      'fill_field',
+      async (data) => {
+        const payload = JSON.parse(data.payload);
+        const args = payload.arguments
+          ? payload.arguments.raw_arguments : payload;
+        return JSON.stringify(await handleFillField(args));
+      }
+    );
+
+    await room.connect(session.wsUrl, session.token);
+    console.log('[Maryam] Connected on:', getCurrentPageKey());
+
+    // Enable mic automatically — Maryam is always listening
+    await room.localParticipant.setMicrophoneEnabled(true);
+
+    // Update mic button to show connected state
+    if (micBtn) {
+      micBtn.classList.remove('connecting');
+      micBtn.classList.add('connected');
+      micBtn.title = 'مریم سے بات کر رہے ہیں';
+      // Mic button now just toggles mute/unmute
+      micBtn.addEventListener('click', async () => {
+        const isMuted = !room.localParticipant.isMicrophoneEnabled;
+        await room.localParticipant.setMicrophoneEnabled(isMuted);
+        micBtn.textContent = isMuted ? '🎤' : '🔇';
+        micBtn.style.background = isMuted ? '#167B38' : '#e53e3e';
+      });
+    }
+
+  } catch (err) {
+    console.error('[Maryam] Connection failed:', err);
+    if (micBtn) {
+      micBtn.classList.remove('connecting');
+      micBtn.style.background = '#e53e3e';
+      micBtn.title = 'Connection failed — refresh to retry';
+      micBtn.textContent = '⚠️';
+    }
+  }
+}
+```
+
+---
+
+#### SECTION 9 — Boot on DOMContentLoaded
+
+```javascript
+document.addEventListener('DOMContentLoaded', () => {
+  injectPointerStylesOnce();
+  injectPointerElements();
+  connectAndRegisterTools();
+});
+```
+
+---
+
+### MODIFY: dastak-clone/index.html
+
+Find the closing </body> tag. Add these two lines immediately 
+before it, after all existing script tags:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="assets/js/maryam-agent.js"></script>
+```
+
+Do not remove or change any existing script tags.
+
+---
+
+### MODIFY: dastak-clone/services.html
+
+Same — add before </body>:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="assets/js/maryam-agent.js"></script>
+```
+
+Do not remove or change any existing script tags.
+
+---
+
+### MODIFY: dastak-clone/apply.html
+
+Same — add before </body>:
+
+```html
+<script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+<script src="assets/js/maryam-agent.js"></script>
+```
+
+Do not remove or change any existing script tags.
+
+---
+
+### DELETE or IGNORE: voice-agent.js
+
+If a file called voice-agent.js exists anywhere in the project,
+it is now superseded by maryam-agent.js. Remove the script tag 
+for voice-agent.js from any HTML file that has it, and do not 
+include it anywhere. maryam-agent.js is the only agent file.
+
+---
+
+## What the combined system does — behaviour summary
+
+### What Maryam does (Track A — voice intelligence)
+- Speaks to the citizen in Urdu via Uplift AI realtime assistant
+- Listens to the citizen's voice continuously (mic always on)
+- Decides what to do next based on what the citizen says
+- Calls get_page_context() to understand where it is
+- Calls navigate_to_page() to move between pages
+- Calls point_to_element() to show the citizen what to click
+- Calls fill_field() to fill confirmed form values automatically
+
+### What the pointer engine does (Track B — visual layer)
+- Renders the smooth animated green circle (44px, brand green)
+- Moves it to whatever element Maryam pointed at
+- Keeps it positioned correctly during scroll and resize
+- Typewriter-fills fields character by character when fill_field 
+  is called
+- Shows Urdu status text above the mic button
+- Manages mic button state (grey=connecting, green=connected, 
+  red=muted)
+
+### How they connect
+Maryam calls point_to_element('selector') via RPC.
+The pointer engine moves the green circle to that element and 
+waits for the citizen to physically click it.
+The citizen clicks — pointer disappears, Maryam continues.
+
+Maryam calls fill_field('fCnic', '3520212345678') via RPC.
+The pointer engine moves to the field, typewriter-fills it,
+fires all validation events, removes highlight.
+Field is filled — Maryam confirms verbally and moves to next field.
+
+---
+
+## Critical notes — do not miss these
+
+1. The UPLIFT_BASE URL is https://api.upliftai.org/v1
+   The UPLIFT_API_KEY secret stored in Replit is NOT used in 
+   maryam-agent.js directly — the public session endpoint does 
+   not require the API key from the browser. The key was used 
+   by Track A to configure the assistant on the server side. 
+   Do not attempt to read process.env.UPLIFT_API_KEY in this 
+   browser-side file — it will be undefined.
+
+2. The session token from createPublicSession already contains 
+   the credentials the LiveKit room needs. Do not add any 
+   Authorization headers to the LiveKit room.connect() call.
+
+3. The mic button starts in 'connecting' state (grey, pulsing).
+   It becomes green once room.connect() succeeds. If connection 
+   fails it turns red with a warning emoji. This gives the 
+   citizen clear visual feedback about whether Maryam is ready.
+
+4. Session persistence across page navigations works via 
+   sessionStorage key 'maryam_session'. When services.html 
+   loads after a navigation from homepage, getOrResumeSession() 
+   finds the saved token and reconnects to the same LiveKit room 
+   instead of creating a new session. This keeps the same voice 
+   conversation alive.
+
+5. point_to_element WAITS for the citizen to click — it does 
+   not auto-click. This is intentional and correct. Maryam 
+   guides, the citizen acts. The pointer shows exactly where 
+   to click. This is the core UX of the product.
+
+6. fill_field DOES fill automatically without waiting for a 
+   click. Maryam has already confirmed the value by voice 
+   before calling fill_field. The typewriter effect shows the 
+   citizen what is being entered.
+
+---
+
+## After making all changes
+
+1. Verify all three HTML pages render normally in the browser
+2. Open browser console — confirm no script errors on load
+3. Confirm [Maryam] Connected on: homepage appears in console
+4. Confirm green mic button appears bottom-right on all pages
+5. Confirm mic button turns green (not grey) after a few seconds
+6. Stage all changes
+7. Commit: "Integrate Maryam voice agent — Track A + Track B combined"
+8. Push to connected GitHub repository default branch

@@ -548,14 +548,11 @@
         offcanvasEl.addEventListener('show.bs.offcanvas', function () { resetWizard(); });
 
         // Normal card clicks expand the inline details panel (handled by services.js).
-        // The voice agent opens the offcanvas directly via navSelectRenewalService()
-        // in voice-agent.js — no click interception needed here.
+        // The Maryam voice agent (assets/js/maryam-agent.js) points at the inline
+        // panel elements — no click interception needed here.
     })();
     </script>
 
-    <div id="agent-pointer"></div>
-    <div id="voice-agent-panel"></div>
-    <script src="voice-agent.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <script src="assets/js/maryam-agent.js"></script>
 </body>
