@@ -44,7 +44,18 @@
                    'their click — you never click for them. After ' +
                    'every page change you receive a [PAGE UPDATE] ' +
                    'message; when the flow is active, immediately ' +
-                   'call guide_next_step to continue guiding.',
+                   'call guide_next_step to continue guiding. ' +
+                   'INTENT ROUTING: if the citizen wants a brand-new ' +
+                   'license (they have never held one before — phrases ' +
+                   'like "new license", "nayi license", "pehli baar ' +
+                   'license banwani hai"), that is NOT a renewal — use ' +
+                   'service_key "learner_driving_license" and explain ' +
+                   'that a Learner License is the required first step ' +
+                   'before a regular/new license can be issued. For ' +
+                   'every other request, match it to the specific ' +
+                   'renewal or duplicate service the citizen actually ' +
+                   'asked for (see the services page config for the ' +
+                   'full list) rather than defaulting to the same one.',
       notes: 'Do not use navigate_to_page during a guided flow — ' +
              'the citizen must click the buttons themselves.',
     },
@@ -56,7 +67,17 @@
                    'and waits for the citizen to click it. After a ' +
                    'click, the tool result tells you what to say and ' +
                    'that you should call guide_next_step for the next ' +
-                   'step. Never click for the citizen.',
+                   'step. Never click for the citizen. ' +
+                   'INTENT ROUTING: "new license" / "first license" / ' +
+                   'no license held yet → service_key ' +
+                   '"learner_driving_license" (tell the citizen a ' +
+                   'Learner License must come first). A license they ' +
+                   'already hold that is expiring or expired → the ' +
+                   'matching "renewal_*" service_key for that specific ' +
+                   'license type. Lost or damaged license → the ' +
+                   'matching "duplicate_*" service_key. Always pick the ' +
+                   'element whose triggers/label match what the citizen ' +
+                   'actually described, never a generic default.',
       elements: [
         {
           service_key:  'renewal_driving_license',
@@ -81,8 +102,16 @@
             'learner license',
             'learning license',
             'pehli baar license',
+            'new license',
+            'nayi license',
+            'license banwana hai',
+            'license nahi hai',
             'لرنر لائسنس',
           ],
+          note:         'Route here whenever the citizen wants a license ' +
+                        'and has never held one before ("new license") — ' +
+                        'a Learner License is the mandatory first step; ' +
+                        'explain that to the citizen before pointing.',
           use_tool:     'start_service',
         },
         {
@@ -277,7 +306,7 @@
       navigates: true,
       // say_now: spoken as soon as the pointer appears (agent is free to talk)
       say_now: 'Theek hai! Pehle main aapko Services page par le chalti hoon. ' +
-               'Screen par ek green button highlight ho raha hai — uss par click karein.',
+               'Screen par relevant button highlight ho gaya hai — uss par click karein.',
       say_after: 'Bohat acha! Services page khul raha hai — ek second mein wahan pohonch jaayenge.',
     },
     {
@@ -432,10 +461,10 @@
       #maryam-pointer {
         position: fixed;
         border-radius: 14px;
-        border: 3px solid var(--secondary-color, #f5bb18);
-        box-shadow: 0 0 0 4px rgba(245,187,24,0.20),
-                    0 0 22px rgba(13,107,57,0.35);
-        background: rgba(245,187,24,0.06);
+        border: 3px solid #e53935;
+        box-shadow: 0 0 0 4px rgba(229,57,53,0.20),
+                    0 0 22px rgba(229,57,53,0.35);
+        background: rgba(229,57,53,0.06);
         pointer-events: none;
         display: none;
         z-index: 99999;
@@ -449,9 +478,9 @@
         animation: maryamPulse 0.5s ease-out;
       }
       @keyframes maryamPulse {
-        0%   { box-shadow: 0 0 0 4px rgba(245,187,24,0.55), 0 0 22px rgba(13,107,57,0.5); }
-        70%  { box-shadow: 0 0 0 12px rgba(245,187,24,0), 0 0 30px rgba(13,107,57,0.25); }
-        100% { box-shadow: 0 0 0 4px rgba(245,187,24,0.20), 0 0 22px rgba(13,107,57,0.35); }
+        0%   { box-shadow: 0 0 0 4px rgba(229,57,53,0.55), 0 0 22px rgba(229,57,53,0.5); }
+        70%  { box-shadow: 0 0 0 12px rgba(229,57,53,0), 0 0 30px rgba(229,57,53,0.25); }
+        100% { box-shadow: 0 0 0 4px rgba(229,57,53,0.20), 0 0 22px rgba(229,57,53,0.35); }
       }
       #maryam-status {
         position: fixed;
@@ -783,7 +812,20 @@
     };
     saveFlow(flow);
 
-    return executeCurrentFlowStep();
+    const result = await executeCurrentFlowStep();
+
+    // A "new license" request lands here as learner_driving_license — make
+    // sure the citizen hears WHY before the pointing instructions, since
+    // they asked for a "new"/regular license, not explicitly a learner one.
+    if (serviceKey === 'learner_driving_license' && result &&
+        result.presentationInstructions) {
+      result.presentationInstructions =
+        'Pakistan mein naya (regular) license seedha nahi banta — pehle ' +
+        'Learner License lena zaroori hai. Yeh batayein, phir: ' +
+        result.presentationInstructions;
+    }
+
+    return result;
   }
 
   // Executes the flow's current step and advances state on the
@@ -937,6 +979,7 @@
 
       movePointerTo(wrapper);   // not awaited — dot animates while Maryam talks
       triggerPulse();
+      setStatus('Next step: solve the highlighted box');
 
       // Wait (up to ~30 s) for the answer to become CORRECT. Resolves on
       // the input event — never a timer poll — so typing alone advances
@@ -945,6 +988,7 @@
 
       if (state.correct) {
         hidePointer();
+        setStatus('', false);
         // Do NOT advance here — the next guide_next_step() re-checks and
         // advances, keeping a single advance path and a bounded call.
         return {
@@ -1074,7 +1118,7 @@
         waiting_for_click: true,
         presentationInstructions:
           (step.say_now ||
-            'Screen par ek green button highlight ho gaya hai. ' +
+            'Relevant button highlight ho gaya hai. ' +
             'User ko batayein ke woh highlighted element par click karein.') +
           ' Uss click se naya page khulega. Koi tool call na karein — ' +
           'agla [PAGE UPDATE] message aane ka intezaar karein, phir ' +
@@ -1106,7 +1150,7 @@
         still_waiting: true,
         presentationInstructions:
           'User ne abhi tak click nahi kiya. Narmi se yaad dilayein ke ' +
-          'screen par jo cheez green dot se highlight ho rahi hai uss par ' +
+          'screen par jo cheez highlight ho rahi hai uss par ' +
           'tap karein — pointer wahin maujood hai. Phir guide_next_step() ' +
           'dobara call karein.',
       };
@@ -1280,8 +1324,8 @@
           'User ne click kar diya hai. Unhein shabashi dein aur agla qadam batayein.';
       } else if (outcome.timed_out) {
         outcome.presentationInstructions =
-          'User ne abhi tak click nahi kiya. Narmi se yaad dilayein ke green ' +
-          'dot wali jagah par tap karein.';
+          'User ne abhi tak click nahi kiya. Narmi se yaad dilayein ke ' +
+          'highlighted jagah par tap karein.';
       } else {
         outcome.presentationInstructions =
           'Screen par woh cheez nahi mili ya pointer hat gaya. User ko ' +
