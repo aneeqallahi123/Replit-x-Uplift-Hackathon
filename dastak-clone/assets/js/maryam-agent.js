@@ -296,8 +296,19 @@
     return { navigated: true, target: url };
   }
 
+  // Only one point operation may be active at a time. A new point call
+  // (or page unload) cancels the previous one so its listeners are removed
+  // and its RPC resolves instead of hanging forever.
+  let activePointCancel = null;
+
+  window.addEventListener('beforeunload', () => {
+    if (activePointCancel) activePointCancel('page unload');
+  });
+
   async function handlePointToElement(payload) {
     const selector = payload.element_id;
+
+    if (activePointCancel) activePointCancel('superseded by new point_to_element');
 
     try {
       const el = await waitForElement(selector);
@@ -318,13 +329,23 @@
       // Wait for the CITIZEN to click the element (not auto-click).
       // Maryam POINTS and WAITS — the citizen does the clicking.
       return await new Promise((resolve) => {
+        let removalWatcher = null;
+
         function cleanup() {
           window.removeEventListener('scroll', reposition, true);
           window.removeEventListener('resize', reposition);
           el.removeEventListener('click', onClick, true);
+          if (removalWatcher) removalWatcher.disconnect();
+          if (activePointCancel === cancel) activePointCancel = null;
           hidePointer();
           setStatus('', false);
         }
+
+        function cancel(reason) {
+          cleanup();
+          resolve({ clicked: false, cancelled: true, element_id: selector, reason: reason });
+        }
+        activePointCancel = cancel;
 
         function reposition() {
           const rect = el.getBoundingClientRect();
@@ -336,6 +357,15 @@
 
         window.addEventListener('scroll', reposition, true);
         window.addEventListener('resize', reposition);
+
+        // If the target is removed from the DOM (dynamic panels), resolve
+        // with an error instead of waiting forever.
+        removalWatcher = new MutationObserver(() => {
+          if (!document.body.contains(el)) {
+            cancel('element removed from page');
+          }
+        });
+        removalWatcher.observe(document.body, { childList: true, subtree: true });
 
         function onClick() {
           cleanup();
@@ -364,7 +394,53 @@
       // Highlight the field
       el.classList.add('field-highlight');
 
-      // Typewriter fill — character by character
+      if (el.tagName === 'SELECT') {
+        // Select-aware fill: match an option by value or label
+        // (case-insensitive), select it once, and fire events once.
+        const wanted = String(value).trim().toLowerCase();
+        const match = Array.from(el.options).find(
+          (opt) =>
+            opt.value.trim().toLowerCase() === wanted ||
+            opt.textContent.trim().toLowerCase() === wanted
+        );
+        if (!match) {
+          el.classList.remove('field-highlight');
+          hidePointer();
+          const options = Array.from(el.options)
+            .map((o) => o.textContent.trim())
+            .filter(Boolean);
+          return {
+            filled: false,
+            field_name: fieldId,
+            error: 'No option matches "' + value + '". Valid options: ' + options.join(' | '),
+          };
+        }
+        el.focus();
+        el.value = match.value;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        await delay(300);
+        el.classList.remove('field-highlight');
+        hidePointer();
+        return { field_name: fieldId, value: match.textContent.trim(), filled: true };
+      }
+
+      if (el.type === 'date') {
+        // Date inputs reject partial values — set once (expects YYYY-MM-DD).
+        el.focus();
+        el.value = String(value);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        const ok = el.value === String(value);
+        await delay(300);
+        el.classList.remove('field-highlight');
+        hidePointer();
+        return ok
+          ? { field_name: fieldId, value: value, filled: true }
+          : { filled: false, field_name: fieldId, error: 'Invalid date value "' + value + '" — use YYYY-MM-DD.' };
+      }
+
+      // Typewriter fill — character by character (text-like inputs)
       el.value = '';
       el.focus();
       for (const char of String(value)) {
