@@ -253,6 +253,7 @@ function renderLicenseLookupForm(withRenewalFields) {
         <div class="col-md-4">
             <label class="form-label">Renewal Duration <span class="req">*</span></label>
             <select class="form-select" id="fDuration">
+                <option value="">Select…</option>
                 <option>For 1 Year</option><option>For 2 Years</option><option>For 3 Years</option>
                 <option>For 4 Years</option><option>For 5 Years</option>
             </select>
@@ -260,6 +261,7 @@ function renderLicenseLookupForm(withRenewalFields) {
         <div class="col-md-4">
             <label class="form-label">Is old License in Possession <span class="req">*</span></label>
             <select class="form-select" id="fPossession">
+                <option value="">Select…</option>
                 <option>Yes, in my possession</option>
                 <option>No, it's lost</option>
             </select>
@@ -352,6 +354,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!/^\d{13}$/.test(cnic)) errors.push('Enter a valid 13-digit CNIC.');
         if (!licenseNo) errors.push('License No. is required.');
         if (!issuanceDate) errors.push('License Issuance Date is required.');
+        // Renewal-only selects: present for renewal-license, absent for
+        // duplicate-license. Both now start on an empty placeholder option,
+        // so an untouched select must be rejected instead of silently
+        // defaulting to the first real value.
+        const duration = document.getElementById('fDuration');
+        const possession = document.getElementById('fPossession');
+        if (duration && !duration.value.trim()) errors.push('Renewal Duration is required.');
+        if (possession && !possession.value.trim()) errors.push('Is old License in Possession is required.');
         return errors;
     }
 
