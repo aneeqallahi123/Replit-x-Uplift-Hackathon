@@ -1,0 +1,97 @@
+# Dastak Voice Agent — Complete Architecture Reset
+
+## What was built before and why it is wrong
+
+The previous implementation built a SIDEBAR that opens alongside the 
+website and fills a form inside itself. This is the opposite of what 
+is needed.
+
+DELETE voice-agent.js entirely and start fresh. The concept must be 
+rebuilt from scratch with the correct mental model.
+
+---
+
+## The correct mental model (read this carefully before writing code)
+
+Think of a real person sitting next to a confused citizen, helping 
+them use a website. The helper does not open a separate window and 
+do things there. The helper points at things on the ACTUAL website 
+and says "click here", "now scroll down", "now click that card", 
+"now type your name in this box".
+
+That is exactly what this agent does.
+
+The agent is an INVISIBLE LAYER that floats on top of the real 
+website. It:
+  - Shows a floating pointer/cursor that moves around the screen
+  - Points at real elements on the real website
+  - Clicks real buttons that trigger real website behavior
+  - The website responds naturally to those clicks (offcanvases open,
+    pages navigate, modals fire) exactly as they would if a human 
+    clicked them
+  - The agent then moves to the next element and continues
+
+The agent never opens its own form. It never has its own sidebar. 
+It never fills anything in a container it created. It only 
+interacts with elements that already exist in the website's own HTML.
+
+When the agent clicks the "Renewal of Regular License" card, the 
+WEBSITE'S OWN offcanvas opens (because that is what the website 
+does when you click that card). The agent then moves its pointer 
+into that offcanvas and fills the WEBSITE'S OWN form fields.
+
+The agent is a ghost operating the real website. It does not 
+build its own website alongside it.
+
+---
+
+## What the agent looks like visually
+
+Two things float on screen at all times, injected by voice-agent.js:
+
+1. A green circular pointer (44px, border: 3px solid #167B38)
+   This is the "finger" that points at and clicks things.
+   It moves with smooth CSS transitions.
+   It pulses when it clicks something.
+   It is the ONLY thing the agent adds to the visual experience.
+
+2. A floating panel in the bottom-right corner containing:
+   - A status bubble (shows Urdu text about what the agent is doing)
+   - A mic button (green circle, 60px)
+   
+   This panel is SMALL and UNOBTRUSIVE. It sits in the corner.
+   It does NOT take up half the screen.
+   It does NOT contain a form.
+   It does NOT contain any navigation of its own.
+
+That is the entire visual footprint of the agent. Everything else 
+the user sees is the real Dastak website responding to real clicks.
+
+---
+
+## The full navigation flow the agent must execute
+
+The journey starts on index.html (home page) and ends at the 
+success modal on services.html. This is the complete path:
+
+### STAGE 1 — Home page (index.html)
+
+The agent starts here. The citizen is looking at the Dastak home page.
+
+  STEP 1A — Point at "Apply Service" hero button
+    Target: a.btn_apply_service_hero (inside .hero_actions)
+    Action: pointer moves to the button, hovers for 800ms
+    Status: "سروس کے لیے درخواست دینے کا بٹن..."
+    
+  STEP 1B — Click "Apply Service"
+    Action: pointer pulses, clicks the button
+    Result: page scrolls down to #govt_services section 
+            (this is what the button does — href="#govt_services")
+    Wait: 600ms for scroll to settle
+    Status: "سروسز دیکھ رہا ہوں..."
+
+  STEP 1C — Point at DLIMS card in the services slider
+    Target: .explore_slide_item[data-name="dlims"] 
+            (the DLIMS category card)
+    Action: pointer moves to the DLIMS card, hovers 800ms
+    Status: "ڈی

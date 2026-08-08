@@ -1,0 +1,482 @@
+# Dastak Voice Agent — Complete Architecture Reset
+
+## What was built before and why it is wrong
+
+The previous implementation built a SIDEBAR that opens alongside the 
+website and fills a form inside itself. This is the opposite of what 
+is needed.
+
+DELETE voice-agent.js entirely and start fresh. The concept must be 
+rebuilt from scratch with the correct mental model.
+
+---
+
+## The correct mental model (read this carefully before writing code)
+
+Think of a real person sitting next to a confused citizen, helping 
+them use a website. The helper does not open a separate window and 
+do things there. The helper points at things on the ACTUAL website 
+and says "click here", "now scroll down", "now click that card", 
+"now type your name in this box".
+
+That is exactly what this agent does.
+
+The agent is an INVISIBLE LAYER that floats on top of the real 
+website. It:
+  - Shows a floating pointer/cursor that moves around the screen
+  - Points at real elements on the real website
+  - Clicks real buttons that trigger real website behavior
+  - The website responds naturally to those clicks (offcanvases open,
+    pages navigate, modals fire) exactly as they would if a human 
+    clicked them
+  - The agent then moves to the next element and continues
+
+The agent never opens its own form. It never has its own sidebar. 
+It never fills anything in a container it created. It only 
+interacts with elements that already exist in the website's own HTML.
+
+When the agent clicks the "Renewal of Regular License" card, the 
+WEBSITE'S OWN offcanvas opens (because that is what the website 
+does when you click that card). The agent then moves its pointer 
+into that offcanvas and fills the WEBSITE'S OWN form fields.
+
+The agent is a ghost operating the real website. It does not 
+build its own website alongside it.
+
+---
+
+## What the agent looks like visually
+
+Two things float on screen at all times, injected by voice-agent.js:
+
+1. A green circular pointer (44px, border: 3px solid #167B38)
+   This is the "finger" that points at and clicks things.
+   It moves with smooth CSS transitions.
+   It pulses when it clicks something.
+   It is the ONLY thing the agent adds to the visual experience.
+
+2. A floating panel in the bottom-right corner containing:
+   - A status bubble (shows Urdu text about what the agent is doing)
+   - A mic button (green circle, 60px)
+   
+   This panel is SMALL and UNOBTRUSIVE. It sits in the corner.
+   It does NOT take up half the screen.
+   It does NOT contain a form.
+   It does NOT contain any navigation of its own.
+
+That is the entire visual footprint of the agent. Everything else 
+the user sees is the real Dastak website responding to real clicks.
+
+---
+
+## The full navigation flow the agent must execute
+
+The journey starts on index.html (home page) and ends at the 
+success modal on services.html. This is the complete path:
+
+### STAGE 1 — Home page (index.html)
+
+The agent starts here. The citizen is looking at the Dastak home page.
+
+  STEP 1A — Point at "Apply Service" hero button
+    Target: a.btn_apply_service_hero (inside .hero_actions)
+    Action: pointer moves to the button, hovers for 800ms
+    Status: "سروس کے لیے درخواست دینے کا بٹن..."
+    
+  STEP 1B — Click "Apply Service"
+    Action: pointer pulses, clicks the button
+    Result: page scrolls down to #govt_services section 
+            (this is what the button does — href="#govt_services")
+    Wait: 600ms for scroll to settle
+    Status: "سروسز دیکھ رہا ہوں..."
+
+  STEP 1C — Point at DLIMS card in the services slider
+    Target: .explore_slide_item[data-name="dlims"] 
+            (the DLIMS category card)
+    Action: pointer moves to the DLIMS card, hovers 800ms
+    Status: "ڈی ایل آئی ایم ایس سروسز..."
+
+  STEP 1D — Click DLIMS card
+    Action: pointer pulses, clicks the DLIMS card
+    Result: the website navigates to services.html
+            (update the DLIMS card href to "services.html" 
+             if it is currently "#" — this is a required fix)
+    Wait: 800ms for page load/navigation
+    Status: "ڈرائیونگ لائسنس سروسز..."
+
+### STAGE 2 — Services page (services.html)
+
+The agent is now on the services page. The DLIMS accordion is 
+already expanded (it loads expanded by default).
+
+  STEP 2A — Point at "Renewal of Regular License" card
+    Target: div[data-service-key="renewal_driving_license"]
+    Action: pointer moves to the card, hovers 800ms
+    The pointer hovering here is the KEY moment — this is 
+    where the citizen understands which service is being selected
+    Status: "لائسنس رینیوول سروس..."
+
+  STEP 2B — Click "Renewal of Regular License" card
+    Action: pointer pulses, clicks the card
+    Result: the WEBSITE'S OWN offcanvas (#appFormOffcanvas) 
+            slides in from the right — this is the website's 
+            existing behavior, the agent did not create this
+    Wait: 700ms for Bootstrap offcanvas animation to complete
+    Status: "فارم کھل رہا ہے..."
+
+### STAGE 3 — Inside the offcanvas (Step 1: Personal Info)
+
+The offcanvas is now open. The agent moves into it.
+The agent is filling fields in the WEBSITE'S OWN offcanvas.
+Not a sidebar it created. The real one.
+
+  STEP 3A — Point at Full Name field
+    Target: #wizardFullName (inside #appFormOffcanvas)
+    IMPORTANT: call getBoundingClientRect() AFTER the 700ms delay,
+    not before. The offcanvas must be fully open and in its 
+    final position before you try to position the pointer on 
+    elements inside it.
+    Action: pointer moves to #wizardFullName
+    Status: "نام بھر رہا ہوں..."
+
+  STEP 3B — Fill Full Name
+    Action: typewriter fill, 60ms per character
+    Value: "علی احمد"
+    After fill: speakConfirmation("✓ نام: علی احمد")
+    speakConfirmation is a Track A stub — currently shows 
+    text in status bubble and waits 1200ms
+
+  STEP 3C — Point at CNIC field
+    Target: #wizardCnic
+    Action: pointer moves to field
+    Status: "شناختی کارڈ نمبر بھر رہا ہوں..."
+
+  STEP 3D — Fill CNIC
+    Action: typewriter fill
+    Value: "3520212345678"
+    After fill: speakConfirmation("✓ شناختی کارڈ: 3520212345678")
+
+  STEP 3E — Point at Next button and click it
+    Target: #btn-next
+    Action: pointer moves to button, hovers 500ms, clicks
+    Result: website's own wizard advances to Step 2
+    Wait: 600ms
+    Status: "اگلا مرحلہ..."
+
+### STAGE 4 — Inside the offcanvas (Step 2: Documents)
+
+  STEP 4A — Point at Next button (skip documents in demo)
+    Target: #btn-next
+    Action: pointer moves to button, hovers 400ms, clicks
+    Result: website's own wizard advances to Step 3
+    Wait: 600ms
+    Status: "دستاویزات کا مرحلہ..."
+
+### STAGE 5 — Inside the offcanvas (Step 3: Review & Confirmation)
+
+  STEP 5A — Point at terms checkbox
+    Target: #wizardTerms
+    Action: pointer moves to checkbox, hovers 400ms
+    Status: "شرائط قبول کر رہا ہوں..."
+
+  STEP 5B — Check the checkbox
+    Action: pointer pulses, clicks checkbox,
+            also set checkbox.checked = true programmatically
+    Wait: 400ms
+
+  STEP 5C — Point at submit button and click
+    Target: #btn-next (now acts as submit on Step 3)
+    Action: pointer moves to button, hovers 500ms, clicks
+    Result: website's own success modal (#successModal) fires
+    Wait: 500ms
+    Status: "درخواست جمع ہو رہی ہے..."
+
+### STAGE 6 — Success
+
+  STEP 6A — Hide pointer, show completion
+    hidePointer()
+    Status: "فارم جمع ہو گیا ✅"
+    Wait: 2500ms
+    Hide status bubble
+
+---
+
+## Cross-page navigation requirement
+
+The flow crosses two pages: index.html → services.html.
+
+The voice agent must be loaded on BOTH pages. Add the agent 
+injection lines to BOTH files:
+
+In index.html, just before </body>:
+  <div id="agent-pointer"></div>
+  <div id="voice-agent-panel"></div>
+  <script src="voice-agent.js"></script>
+
+In services.html, just before </body>:
+  <div id="agent-pointer"></div>
+  <div id="voice-agent-panel"></div>
+  <script src="voice-agent.js"></script>
+
+The voice-agent.js must detect which page it is on and run 
+the correct stage:
+
+  const currentPage = window.location.pathname;
+  
+  if (currentPage.includes('index') || currentPage === '/' 
+      || currentPage.endsWith('/')) {
+    // On home page — run STAGE 1 when mic clicked
+    micBtn.addEventListener('click', () => runHomePageFlow());
+  }
+  
+  if (currentPage.includes('services')) {
+    // On services page — run STAGE 2 onwards when mic clicked
+    micBtn.addEventListener('click', () => runServicesPageFlow());
+  }
+
+The DLIMS card on index.html currently has href="#". 
+Change it to href="services.html" so that when the agent 
+(or a real user) clicks it, it navigates to the services page.
+This is a one-character fix in index.html — make it.
+
+---
+
+## Required fix: services.js wizard validation
+
+The existing services.js likely validates Step 1 before allowing 
+the Next button to advance the wizard. When the agent fills fields 
+programmatically, Bootstrap validation may not recognise the values 
+as "filled" because no real keyboard events were fired.
+
+To fix this, the typeIntoField function must fire the correct events:
+
+  el.value += char;
+  el.dispatchEvent(new Event('input',  { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
+
+After filling ALL fields in a step, before clicking Next, 
+also trigger blur on each field:
+  el.dispatchEvent(new Event('blur', { bubbles: true }));
+
+If the Next button click still does not advance the wizard 
+(because validation blocks it), add this safety fallback 
+immediately after the click:
+
+  // Safety fallback: if wizard did not advance, force it
+  const step1 = document.getElementById('step1-content');
+  if (step1 && step1.style.display !== 'none') {
+    // Step 1 is still showing — validation blocked Next
+    // Manually hide step 1 and show step 2
+    step1.style.display = 'none';
+    const step2 = document.getElementById('step2-content');
+    if (step2) step2.style.display = 'block';
+    // Update stepper visuals
+    document.querySelector('[data-step="1"]')
+      ?.classList.remove('active');
+    document.querySelector('[data-step="2"]')
+      ?.classList.add('active');
+  }
+
+---
+
+## Three-layer architecture (keep this separation clean)
+
+### Layer 1 — Pointer Engine (pure DOM interaction, no Dastak knowledge)
+
+  delay(ms) → Promise
+
+  setStatus(text, show = true)
+    Sets #mic-status-bubble text. show=false hides the bubble.
+
+  async movePointerTo(el)
+    1. Guard: if (!el) { console.warn('element not found'); return; }
+    2. Check if el is in viewport. If not, scroll it into view:
+         el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+         await delay(500)
+    3. Get fresh getBoundingClientRect() AFTER scroll
+    4. Center pointer on element (x - 22, y - 22)
+    5. Add .active to pointer
+    6. await delay(500) for CSS transition
+
+  triggerPulse()
+    Remove .pulse, force reflow, add .pulse back
+
+  async hoverElement(el, ms)
+    await movePointerTo(el)
+    await delay(ms)
+
+  async clickElement(el)
+    await hoverElement(el, 400)
+    triggerPulse()
+    await delay(200)
+    el.click()
+    await delay(300)
+
+  async typeIntoField(el, value)
+    await movePointerTo(el)
+    triggerPulse()
+    el.classList.add('field-highlight')
+    el.value = ''
+    for (const char of value) {
+      el.value += char
+      el.dispatchEvent(new Event('input',  { bubbles: true }))
+      el.dispatchEvent(new Event('change', { bubbles: true }))
+      el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }))
+      await delay(60)
+    }
+    el.dispatchEvent(new Event('blur', { bubbles: true }))
+    await delay(300)
+    el.classList.remove('field-highlight')
+
+  hidePointer()
+    pointer.classList.remove('active')
+
+### Layer 2 — Navigation Actions (Dastak-specific, calls Layer 1 only)
+
+  These are the individual named steps described in the flow above.
+  Each function does exactly one thing.
+  None of them touch the DOM directly — they call Layer 1 functions.
+
+  async navClickApplyService()
+  async navScrollToDlims()
+  async navClickDlimsCard()
+  async navClickRenewalCard()
+  async navWaitForOffcanvas()
+  async navFillFullName(value)
+  async navFillCnic(value)
+  async navClickNext(statusText)
+  async navSkipDocuments()
+  async navCheckTerms()
+  async navSubmit()
+
+### Layer 3 — Orchestrators (page-specific flows, calls Layer 2 only)
+
+  async runHomePageFlow()
+    Runs STAGE 1 (index.html steps)
+    Calls navClickApplyService → navScrollToDlims → navClickDlimsCard
+    After navClickDlimsCard, window navigates to services.html
+    The services page will auto-start runServicesPageFlow() 
+    if it detects a URL param: services.html?autostart=true
+    So navClickDlimsCard should navigate to 
+    "services.html?autostart=true" not just "services.html"
+
+  async runServicesPageFlow()
+    Runs STAGES 2-6 (services.html steps)
+    Called either by mic button click on services.html,
+    OR automatically on page load if URL contains ?autostart=true:
+    
+      window.addEventListener('DOMContentLoaded', () => {
+        if (window.location.search.includes('autostart=true')) {
+          setTimeout(() => runServicesPageFlow(), 800)
+          // 800ms delay lets the page fully render first
+        }
+      })
+
+---
+
+## Track A stub functions — keep exactly as before, do not change
+
+  async function captureAndTranscribe() {
+    // STUB — Track A replaces with Uplift AI STT
+    return null;
+  }
+
+  async function extractField(transcript) {
+    // STUB — Track A replaces with LLM field extraction
+    return null;
+  }
+
+  async function speakConfirmation(urduText) {
+    // STUB — Track A replaces with Uplift AI TTS audio
+    setStatus(urduText);
+    await delay(1200);
+  }
+
+---
+
+## Styles — inject via JS as before
+
+Keep all previous styles exactly as specified.
+Add one new style: 
+
+  .field-highlight {
+    outline: 2.5px solid #167B38 !important;
+    background-color: #f1f8f3 !important;
+    transition: all 0.3s;
+  }
+
+The pointer color remains #167B38 (Dastak brand green) throughout.
+
+---
+
+## What the mic button does on each page
+
+On index.html:
+  First click → show consent banner (if not yet consented)
+  After consent → start runHomePageFlow()
+  The flow navigates to services.html?autostart=true
+  The agent continues automatically on the next page
+
+On services.html (direct visit, no autostart param):
+  First click → show consent banner (if not yet consented)
+  After consent → start runServicesPageFlow()
+
+On services.html (?autostart=true):
+  Page load → auto-start runServicesPageFlow() after 800ms
+  No mic click needed — flow continues from where home page left off
+
+---
+
+## Consent banner
+
+Show this ONCE per session before any flow starts.
+Store consent in sessionStorage key 'dastak_voice_consent'.
+If already consented in this session, skip the banner.
+
+Banner: small, bottom-right, above the mic button.
+Urdu text: "یہ ایجنٹ ویب سائٹ پر آپ کی رہنمائی کرے گا۔
+           شروع کرنے کے لیے تصدیق کریں۔"
+Button: "ٹھیک ہے ✓" — green, full width of banner
+On confirm: store consent, hide banner, start flow.
+
+---
+
+## Definition of done
+
+Test this exact sequence before considering the build complete:
+
+1. Open index.html in browser
+2. Green mic button visible bottom-right ✓
+3. Click mic button → consent banner appears ✓
+4. Confirm consent → banner disappears ✓
+5. Pointer appears and moves to "Apply Service" hero button ✓
+6. Pointer hovers on button, then clicks it ✓
+7. Page scrolls to services section ✓
+8. Pointer moves to DLIMS card ✓
+9. Pointer clicks DLIMS card ✓
+10. Browser navigates to services.html ✓
+11. On services.html, pointer reappears automatically ✓
+12. Pointer moves to "Renewal of Regular License" card ✓
+13. Pointer hovers on card (citizen sees which service) ✓
+14. Pointer clicks card ✓
+15. WEBSITE'S OWN offcanvas slides in from right ✓
+    (not a new sidebar — the existing #appFormOffcanvas)
+16. Pointer moves INSIDE the offcanvas to Full Name field ✓
+17. Full Name fills character by character ✓
+18. Pointer moves to CNIC field ✓
+19. CNIC fills character by character ✓
+20. Pointer moves to Next button, clicks it ✓
+21. Wizard advances to Step 2 (website's own wizard) ✓
+22. Pointer skips to Next again ✓
+23. Wizard advances to Step 3 ✓
+24. Pointer moves to terms checkbox, checks it ✓
+25. Pointer moves to submit, clicks it ✓
+26. WEBSITE'S OWN success modal fires ✓
+27. Pointer hides, Urdu confirmation in status bubble ✓
+28. Status bubble fades out ✓
+
+At every step, the thing being clicked or filled is part of the 
+EXISTING website HTML. The agent adds only the pointer and the 
+small bottom-right panel. Everything else the user sees is the 
+real Dastak website responding to real interactions.
