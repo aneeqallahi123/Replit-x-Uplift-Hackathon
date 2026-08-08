@@ -25,6 +25,9 @@
   const ASSISTANT_ID = 'e9311394-097b-49c6-a206-fef2569dce2c';
   const SESSION_STORAGE_KEY = 'maryam_session';
   const FLOW_STORAGE_KEY = 'maryam_flow';
+  // Stores a [CLICK] notification in sessionStorage so it survives page navigation
+  // and can be replayed after auto-reconnect on the next page.
+  const PENDING_CLICK_KEY = 'maryam_pending_click';
   const UPLIFT_BASE = 'https://api.upliftai.org/v1';
 
   // -------------------------------------------------------------------
@@ -970,7 +973,6 @@
   // [PAGE UPDATE]; for non-navigating steps it tells it to call
   // guide_next_step immediately.
   function sendClickNotification(step, flow) {
-    if (!maryamRoom || !maryamConnected) return;
     const nextStep = FLOW_STEPS[flow.stepIndex];
     let msg =
       '[CLICK: ' + step.id + '] (system message — citizen clicked the highlighted element.) ' +
@@ -982,6 +984,20 @@
         'Do NOT call any tool right now — just speak the above line. ' +
         'Wait for the next [PAGE UPDATE] message, then IMMEDIATELY ' +
         'call guide_next_step() and tell the citizen (in Urdu) what to do next.';
+
+      // ── Persist the [CLICK] notification in sessionStorage ──────────────
+      // Native link navigation tears down the WebSocket before sendText()
+      // can flush. Storing the message here guarantees the next page's
+      // pushPageContext will deliver it to the agent after reconnect.
+      try {
+        sessionStorage.setItem(PENDING_CLICK_KEY, JSON.stringify({
+          msg: msg,
+          stepId: step.id,
+          savedAt: Date.now(),
+        }));
+      } catch (e) {
+        console.warn('[Maryam] Could not save pending click to sessionStorage:', e);
+      }
     } else {
       msg +=
         'The citizen is still on the same page. ' +
@@ -989,11 +1005,12 @@
         'Speak the line above, then call guide_next_step() immediately.';
     }
 
+    // Also try sending immediately (may succeed if WebSocket is still up)
+    if (!maryamRoom || !maryamConnected) return;
     maryamRoom.localParticipant
       .sendText(msg, { topic: 'lk.chat' })
       .catch(function (err) {
-        // Use publishData as fallback — [PAGE UPDATE] will cover this anyway.
-        console.warn('[Maryam] sendClickNotification text failed, trying data:', err);
+        console.warn('[Maryam] sendClickNotification text failed (will replay via sessionStorage on next page):', err);
         maryamRoom.localParticipant
           .publishData(new TextEncoder().encode(msg), { reliable: true, topic: 'lk.chat' })
           .catch(function (e2) {
@@ -1268,34 +1285,84 @@
   // -------------------------------------------------------------------
   let maryamRoom = null;
   let maryamConnected = false;
+  let maryamAudioPlaying = false; // tracks whether Maryam's audio element is unblocked
 
-  // Proactively tell the agent which page the citizen is on (and the
-  // guided-flow state) so it never gives instructions for the wrong
-  // page. Sent as a chat text stream (the channel Uplift/LiveKit
-  // agents read user input from), with a data-packet fallback.
+  // Build a human-readable briefing of the active guided flow so the
+  // agent can resume cleanly even if the prior [CLICK] message was lost.
+  function buildFlowBriefing(flow) {
+    const step = FLOW_STEPS[flow.stepIndex] || {};
+    const doneSteps = FLOW_STEPS.slice(0, flow.stepIndex).map(function (s) { return s.id; });
+    const serviceLabel = 'Regular Driving License Renewal';
+    const modeLabel = flow.mode === 'doorstep'
+      ? 'Doorstep Service (a facilitator collects documents at home)'
+      : 'Self Service (apply online, collect final documents from office)';
+    return (
+      'FULL SITUATION: The citizen wants to apply for "' + serviceLabel + '" via ' +
+      modeLabel + '. ' +
+      'Steps already completed: [' + (doneSteps.join(', ') || 'none') + ']. ' +
+      'Current step is "' + (step.id || '?') + '" on the "' + (step.page || '?') + '" page. ' +
+      (step.say_now
+        ? 'If the citizen asks what to do next, say (in Urdu): "' + step.say_now + '" — ' +
+          'but only AFTER calling guide_next_step() and speaking its presentationInstructions. '
+        : '') +
+      'After guide_next_step() returns, IMMEDIATELY speak its presentationInstructions field — ' +
+      'do not paraphrase, do not add preamble.'
+    );
+  }
+
+  // Proactively tells the agent which page the citizen is on (and the
+  // guided-flow state) so it never gives instructions for the wrong page.
+  // Also replays any [CLICK] notification that was stored in sessionStorage
+  // (the click notification races with page unload and may not have reached
+  // the agent in time, so we store it and send it reliably here).
   async function pushPageContext(reason) {
     if (!maryamRoom || !maryamConnected) return;
 
+    // ── Replay stored [CLICK] notification first (pre-navigation) ──────
+    try {
+      const raw = sessionStorage.getItem(PENDING_CLICK_KEY);
+      if (raw) {
+        sessionStorage.removeItem(PENDING_CLICK_KEY);
+        const pending = JSON.parse(raw);
+        // Discard if stale (> 60 s — the room TTL makes this very generous)
+        if (pending.msg && (Date.now() - (pending.savedAt || 0)) < 60000) {
+          console.log('[Maryam] Replaying stored [CLICK] notification:', pending.stepId);
+          try {
+            await maryamRoom.localParticipant.sendText(pending.msg, { topic: 'lk.chat' });
+          } catch (_) {}
+          // Brief pause so the agent processes [CLICK] before [PAGE UPDATE]
+          await delay(200);
+        }
+      }
+    } catch (e) {
+      console.warn('[Maryam] Could not replay pending click:', e);
+    }
+
     const live = buildLiveContext();
-    let text =
-      '[PAGE UPDATE — system message, not the citizen speaking] ' +
-      'Citizen is now on the "' + live.page + '" page (' + reason + '). ' +
-      'Live context: ' + JSON.stringify(live) + '. ';
+    let text;
 
     if (live.guided_flow) {
-      // Lead with the action so the agent acts first, speaks second.
+      // Lead with the imperative so the agent calls guide_next_step before
+      // generating any speech. Follow with a full self-contained briefing so
+      // the agent can resume correctly even without prior conversation context.
+      const flow = loadFlow();
+      const briefing = flow ? buildFlowBriefing(flow) : '';
       text =
         '[PAGE UPDATE — ACTION REQUIRED] ' +
-        'IMMEDIATELY call guide_next_step() now — do not wait, do not speak first. ' +
-        'A guided flow for "' + live.guided_flow.service_key +
+        'CALL guide_next_step() NOW before speaking anything. ' +
+        briefing + ' ' +
+        'Guided flow "' + live.guided_flow.service_key +
         '" is ACTIVE at step "' + live.guided_flow.current_step +
         '" (' + live.guided_flow.step_number + '/' + live.guided_flow.total_steps + '). ' +
-        'Citizen is on the "' + live.page + '" page (' + reason + '). ' +
-        'Context: ' + JSON.stringify(live);
+        'Citizen is now on the "' + live.page + '" page (' + reason + '). ' +
+        'Technical context: ' + JSON.stringify(live);
     } else {
-      text +=
+      text =
+        '[PAGE UPDATE — system message, not the citizen speaking] ' +
+        'Citizen is now on the "' + live.page + '" page (' + reason + '). ' +
         'No guided flow is active. Greet the citizen and ask how you can help. ' +
-        'If they want a service, call start_service.';
+        'If they want a service, call start_service. ' +
+        'Live context: ' + JSON.stringify(live);
     }
 
     try {
@@ -1321,22 +1388,81 @@
     // Must be in the DOM for some browsers to play
     audioEl.style.display = 'none';
     document.body.appendChild(audioEl);
+    maryamAudioPlaying = false;
 
-    // Autoplay safety net — retry on next user click if blocked
-    audioEl.play().catch((err) => {
-      console.warn('[Maryam] Autoplay blocked — will retry on next click:', err);
-      function retryPlay() {
-        audioEl.play()
-          .then(() => {
-            console.log('[Maryam] Audio playback started after user gesture');
-            document.removeEventListener('click', retryPlay);
-          })
-          .catch((e) => {
-            console.warn('[Maryam] Retry also failed:', e);
-          });
-      }
-      document.addEventListener('click', retryPlay);
+    var retryHandlers = [];
+
+    function onPlaySuccess() {
+      if (maryamAudioPlaying) return;
+      maryamAudioPlaying = true;
+      clearAudioNudge();
+      // Remove all retry listeners
+      retryHandlers.forEach(function (h) {
+        document.removeEventListener(h.evt, h.fn, true);
+      });
+      retryHandlers = [];
+      console.log('[Maryam] Audio playback started');
+    }
+
+    function retryPlay() {
+      if (maryamAudioPlaying) return;
+      audioEl.play().then(onPlaySuccess).catch(function () {});
+    }
+
+    // Expose so voice-activity handler can also trigger it
+    window._maryamRetryAudio = retryPlay;
+
+    audioEl.play().then(onPlaySuccess).catch(function (err) {
+      console.warn('[Maryam] Autoplay blocked — registering multi-gesture retry:', err.name);
+      // Retry on any user gesture — click, touch, or keypress
+      ['click', 'touchstart', 'keydown'].forEach(function (evtName) {
+        var handler = function () { retryPlay(); };
+        retryHandlers.push({ evt: evtName, fn: handler });
+        document.addEventListener(evtName, handler, { capture: true });
+      });
+      // Show a visible "tap to hear" nudge after 3 seconds if still blocked
+      setTimeout(function () {
+        if (!maryamAudioPlaying) showAudioNudge(retryPlay);
+      }, 3000);
     });
+  }
+
+  // Nudge badge shown when audio is blocked after page navigation
+  function showAudioNudge(retryFn) {
+    if (document.getElementById('maryam-audio-nudge')) return;
+    var nudge = document.createElement('div');
+    nudge.id = 'maryam-audio-nudge';
+    nudge.setAttribute('style', [
+      'position:fixed', 'bottom:90px', 'right:20px',
+      'background:#1a5c2e', 'color:#fff', 'padding:10px 18px',
+      'border-radius:24px', 'font-size:13px', 'font-weight:600',
+      'z-index:99999', 'cursor:pointer',
+      'box-shadow:0 4px 14px rgba(0,0,0,.35)',
+      'animation:maryamNudgePulse 1.5s ease-in-out infinite',
+      'direction:rtl', 'font-family:inherit'
+    ].join(';'));
+    nudge.textContent = '🔊 مریم کی آواز سننے کے لیے یہاں ٹیپ کریں';
+    nudge.addEventListener('click', function () {
+      retryFn();
+      clearAudioNudge();
+    });
+    document.body.appendChild(nudge);
+
+    // Inject keyframe animation once
+    if (!document.getElementById('maryam-nudge-anim')) {
+      var st = document.createElement('style');
+      st.id = 'maryam-nudge-anim';
+      st.textContent =
+        '@keyframes maryamNudgePulse{' +
+        '0%,100%{opacity:1;transform:scale(1)}' +
+        '50%{opacity:.88;transform:scale(1.05)}}';
+      document.head.appendChild(st);
+    }
+  }
+
+  function clearAudioNudge() {
+    var el = document.getElementById('maryam-audio-nudge');
+    if (el) el.remove();
   }
 
   async function connectAndRegisterTools() {
@@ -1471,6 +1597,10 @@
       const btn = document.getElementById('maryam-mic-btn');
 
       if (userSpeaking) {
+        // User speaking = user gesture context → safe to unlock audio
+        if (!maryamAudioPlaying && window._maryamRetryAudio) {
+          window._maryamRetryAudio();
+        }
         setStatus('سن رہی ہوں...', true);
         if (btn) btn.style.boxShadow = '0 0 0 8px rgba(22,123,56,0.3)';
       } else if (agentSpeaking) {

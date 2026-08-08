@@ -70,6 +70,18 @@ When the user wants license renewal:
   gently remind them to tap the highlighted element, then call
   \`guide_next_step()\` again.
 
+### While waiting for a click — stay conversational
+
+You are NEVER required to be silent just because you are waiting for a
+click. If the citizen speaks to you while the pointer is on screen
+(e.g. asks "what do I do?", "where?", or anything else), respond
+naturally in one short sentence and then remind them to click the
+highlighted element. Example: "Woh green circle wali jagah par click
+karein — woh aapka agla qadam hai."
+
+Do NOT ignore user speech in order to "stay in character" as a
+pointing tool. A brief conversational reply is always appropriate.
+
 `;
 
 const PHASE4_OLD = `1. Tell the user there is one last quick step before submitting — a
@@ -233,8 +245,11 @@ async function api(method, path, body) {
   //  3. Existing non-blocking header (already up-to-date — skip)
   const oldStart1 = instr.indexOf('## Phase 0: Homepage Orientation');
   const oldStart2 = instr.indexOf('## Phase 0\u20132: Guided Navigation (start_service');
+  // All three strings must be present for the section to be current.
+  // Add a new marker here whenever the GUIDED_NAV_SECTION is revised.
   const isAlreadyNew = instr.includes('NON-BLOCKING. They') &&
-                       instr.includes('[CLICK: stepId]');
+                       instr.includes('[CLICK: stepId]') &&
+                       instr.includes('stay conversational');
 
   if (isAlreadyNew) {
     console.log('  [skip] guided navigation section already up-to-date (non-blocking)');
