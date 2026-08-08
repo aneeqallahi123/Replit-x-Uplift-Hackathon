@@ -1,0 +1,349 @@
+# Dastak Voice Agent — Track B Build Instructions
+
+## Context
+This is a hackathon project. We are building a voice-first agent that 
+helps Pakistani citizens renew their driving license on Punjab's Dastak 
+portal by speaking Urdu. The agent visually operates the form on their 
+behalf — the citizen never types anything.
+
+This prompt covers Track B only: the UI layer, animated pointer, mic 
+button, demo flow, and any backend needed to support it. Track A (real 
+Urdu STT, field extraction via LLM, and TTS read-back via Uplift AI) is 
+being built separately and will plug in later at clearly marked stub 
+points. Do not attempt to build Track A. Do not call any Uplift AI 
+endpoints yet. Just leave clean, well-commented stub functions for them.
+
+---
+
+## What already exists in this repo — DO NOT touch these files
+- index.html — Dastak home page
+- services.html — Services page (this is the active demo page)
+- services.js — Existing wizard/offcanvas logic
+- apply.html + apply.js — Apply flow
+- script.js — Home page JS
+- assets/ — All CSS, images, SVGs
+
+Study services.html before writing any code. The key elements are:
+- Service card: [data-service-key="renewal_driving_license"]
+- Application offcanvas: #appFormOffcanvas
+- Full Name input: #wizardFullName
+- CNIC input: #wizardCnic
+- Terms checkbox: #wizardTerms
+- Next/submit button: #btn-next
+- Success modal: #successModal
+- Bootstrap 5.3 and jQuery are already loaded on the page
+
+---
+
+## What to build
+
+### File 1: voice-agent.js (new file)
+This is the entire Track B layer. It must be fully self-contained.
+Load it in services.html by adding these three lines just before </body>:
+  <div id="agent-pointer"></div>
+  <div id="voice-agent-panel"></div>
+  <script src="voice-agent.js"></script>
+
+Do not modify anything else in services.html.
+
+---
+
+### Section 1 — Styles (inject via JS, no separate CSS file)
+
+Inject a <style> tag into <head> with the following:
+
+Agent pointer (#agent-pointer):
+- position: fixed, width/height: 44px, border-radius: 50%
+- border: 3px solid #167B38
+- box-shadow: 0 0 0 4px rgba(22,123,56,0.15), 0 0 16px rgba(22,123,56,0.4)
+- pointer-events: none, z-index: 99999, display: none
+- CSS transition on left and top: 0.5s cubic-bezier(0.25,0.46,0.45,0.94)
+- .active class: display block
+- .pulse class: keyframe animation — scale 1 → 1.4 → 1 over 0.4s
+
+Field highlight (.field-highlight):
+- outline: 2.5px solid #167B38
+- background-color: #f1f8f3
+- transition: all 0.3s
+
+Voice agent panel (#voice-agent-panel):
+- position: fixed, bottom: 24px, right: 24px
+- z-index: 99998
+- display: flex, flex-direction: column, align-items: flex-end, gap: 10px
+
+Status bubble (#mic-status-bubble):
+- background: #167B38, color: white
+- padding: 8px 16px, border-radius: 20px
+- font-size: 13px, font-family: Outfit (already loaded)
+- display: none by default, max-width: 260px
+- text-align: right (Urdu is RTL)
+- box-shadow: 0 4px 12px rgba(0,0,0,0.2)
+
+Mic button (#mic-btn):
+- width/height: 60px, border-radius: 50%
+- background: #167B38, border: none, color: white
+- font-size: 22px, cursor: pointer
+- box-shadow: 0 4px 16px rgba(22,123,56,0.5)
+- transition: transform 0.2s, background 0.2s
+- :hover → transform: scale(1.08), background: #125e2e
+- .listening class → background: #e53e3e, pulse keyframe animation
+  (box-shadow grows and fades: 0 0 0 0 → 0 0 0 12px → 0 0 0 0, 1s infinite)
+
+---
+
+### Section 2 — Panel HTML (inject into #voice-agent-panel)
+
+  <div id="mic-status-bubble"></div>
+  <button id="mic-btn" title="Voice Agent">🎤</button>
+
+---
+
+### Section 3 — Core utility functions
+
+delay(ms):
+  Returns a Promise that resolves after ms milliseconds.
+
+setStatus(text, show = true):
+  Sets #mic-status-bubble textContent to text.
+  Sets display to 'block' if show is true, 'none' if false.
+
+movePointerToElement(el):
+  Gets el.getBoundingClientRect().
+  Sets #agent-pointer left and top to center on the element
+  (subtract 22px from each — half of 44px pointer size).
+  Adds .active class to show the pointer.
+  Returns a Promise that resolves after 500ms 
+  (time for CSS transition to complete).
+
+fillField(fieldId, value):
+  Gets the element by ID.
+  Adds .field-highlight class.
+  Clears the field value.
+  Loops through each character of value:
+    - Appends character to field.value
+    - Dispatches new Event('input', { bubbles: true })
+    - Awaits delay(60)
+  After loop: awaits delay(300).
+  Removes .field-highlight class.
+
+triggerPulse():
+  Removes .pulse from #agent-pointer.
+  Forces reflow (void pointer.offsetWidth).
+  Adds .pulse back.
+
+---
+
+### Section 4 — Field map constant
+
+Define this at the top of voice-agent.js and keep it — 
+Track A will reference it as the integration contract:
+
+const FIELD_MAP = {
+  name: { id: 'wizardFullName', label: 'Full Name',   urduLabel: 'نام' },
+  cnic: { id: 'wizardCnic',     label: 'CNIC Number', urduLabel: 'سی این آئی سی' },
+  // The following fields exist in the real Dastak renewal form.
+  // They live in later wizard steps not yet wired for voice input.
+  // Track A should extract these from speech — Track B will wire 
+  // them up once the wizard steps are expanded:
+  // dob:              { label: 'Date of Birth',     urduLabel: 'تاریخ پیدائش' },
+  // license_number:   { label: 'License Number',    urduLabel: 'لائسنس نمبر' },
+  // license_type:     { label: 'License Type',      urduLabel: 'لائسنس قسم' },
+  // license_category: { label: 'License Category',  urduLabel: 'لائسنس درجہ' },
+  // expiry_date:      { label: 'Expiry Date',        urduLabel: 'میعاد ختم' },
+};
+
+---
+
+### Section 5 — Track A stub functions
+// ═══════════════════════════════════════════════════════════════
+// TRACK A INTEGRATION POINT 1 — Speech to Text (STT)
+// Currently: Does nothing — demo flow skips real recording entirely
+// Replace with: 
+//   - Capture audio via MediaRecorder
+//   - POST audio blob to Uplift AI STT endpoint (Singapore region)
+//   - Return transcript string in Urdu
+// Contract: async function captureAndTranscribe() → string
+// ═══════════════════════════════════════════════════════════════
+async function captureAndTranscribe() {
+  // STUB — Track A replaces this
+  // When real: records mic audio, sends to Uplift AI STT, returns Urdu transcript
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TRACK A INTEGRATION POINT 2 — Field Extraction (NLU)
+// Currently: Returns null — demo flow uses hardcoded DEMO_SEQUENCE
+// Replace with:
+//   - Takes a transcript string
+//   - Calls Track A's LLM-based extraction logic
+//   - Returns structured JSON identifying which field and value
+// Contract: async function extractField(transcript) → 
+//   { field: string, value: string, confidence: number } | null
+// ═══════════════════════════════════════════════════════════════
+async function extractField(transcript) {
+  // STUB — Track A replaces this
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TRACK A INTEGRATION POINT 3 — Text to Speech (TTS read-back)
+// Currently: Shows text in status bubble and waits 1200ms
+// Replace with:
+//   - Takes a confirmation string in Urdu
+//   - POSTs to Uplift AI TTS endpoint (Singapore region)
+//   - Plays returned audio stream, waits for playback to finish
+//   - The 1200ms delay below is the placeholder for audio duration
+// Contract: async function speakConfirmation(urduText) → void
+// ═══════════════════════════════════════════════════════════════
+async function speakConfirmation(urduText) {
+  // STUB — Track A replaces this with real Uplift AI TTS call
+  setStatus(urduText);
+  await delay(1200);
+}
+
+---
+
+### Section 6 — Demo sequence
+
+const DEMO_SEQUENCE = [
+  {
+    field:        'name',
+    value:        'علی احمد',
+    statusFill:   'نام بھر رہا ہوں...',
+    confirmation: '✓ نام: علی احمد',
+  },
+  {
+    field:        'cnic',
+    value:        '3520212345678',
+    statusFill:   'شناختی کارڈ نمبر بھر رہا ہوں...',
+    confirmation: '✓ شناختی کارڈ: 3520212345678',
+  },
+];
+
+---
+
+### Section 7 — Main demo flow function (runDemoFlow)
+
+async function runDemoFlow():
+
+  Step 1 — Open the offcanvas:
+    setStatus('لائسنس رینیوول سروس کھل رہی ہے...')
+    querySelector('[data-service-key="renewal_driving_license"]').click()
+    await delay(800)
+
+  Step 2 — Loop through DEMO_SEQUENCE:
+    For each step:
+      const fieldConfig = FIELD_MAP[step.field]
+      const el = document.getElementById(fieldConfig.id)
+      setStatus(step.statusFill)
+      await movePointerToElement(el)
+      triggerPulse()
+      await delay(200)
+      await fillField(fieldConfig.id, step.value)
+      await speakConfirmation(step.confirmation)
+      // speakConfirmation is currently a stub — shows text + 1200ms wait
+      // Track A will replace it with real Uplift AI TTS audio
+
+  Step 3 — Advance through wizard steps:
+    setStatus('اگلا مرحلہ...')
+    pointer.classList.remove('active')
+    await delay(400)
+    document.getElementById('btn-next').click()   // Step 1 → Step 2
+    await delay(600)
+    document.getElementById('btn-next').click()   // Step 2 → Step 3
+    await delay(600)
+    document.getElementById('wizardTerms').checked = true
+    await delay(300)
+    document.getElementById('btn-next').click()   // Submit → success modal
+
+  Step 4 — Finish:
+    await delay(500)
+    setStatus('فارم جمع ہو گیا ✅')
+    await delay(2000)
+    setStatus('', false)
+
+---
+
+### Section 8 — Mic button click handler
+
+let agentRunning = false;
+
+document.getElementById('mic-btn').addEventListener('click', async () => {
+  if (agentRunning) return;
+  agentRunning = true;
+
+  const btn = document.getElementById('mic-btn');
+  btn.classList.add('listening');
+
+  // ═══════════════════════════════════════════════════════════════
+  // TRACK A INTEGRATION POINT — Live voice input entry
+  // When Track A is ready, replace the direct runDemoFlow() call below 
+  // with the following live loop:
+  //
+  //   const transcript = await captureAndTranscribe()
+  //   const extracted  = await extractField(transcript)
+  //   if (extracted) {
+  //     const fieldConfig = FIELD_MAP[extracted.field]
+  //     const el = document.getElementById(fieldConfig.id)
+  //     await movePointerToElement(el)
+  //     triggerPulse()
+  //     await fillField(fieldConfig.id, extracted.value)
+  //     await speakConfirmation(`${fieldConfig.urduLabel}: ${extracted.value}`)
+  //   }
+  //
+  // For now, skip real voice input entirely and run the hardcoded demo:
+  // ═══════════════════════════════════════════════════════════════
+
+  btn.classList.remove('listening');
+  await runDemoFlow();
+
+  agentRunning = false;
+});
+
+---
+
+### File 2: server.js (new file — only if Replit needs a backend)
+
+Only create this if Replit requires a Node/Express server to serve 
+the HTML files. If Replit serves static files natively, skip this.
+
+If needed, create a minimal Express server:
+- serve all static files from the project root
+- one endpoint: GET /api/config
+  returns: { status: "ok" }
+  (No API keys yet — Track A will add UPLIFT_API_KEY here when ready)
+- listen on port 3000 (or process.env.PORT)
+
+Add to package.json if it does not exist:
+  {
+    "name": "dastak-voice-agent",
+    "version": "1.0.0",
+    "main": "server.js",
+    "scripts": { "start": "node server.js" },
+    "dependencies": { "express": "^4.18.2" }
+  }
+
+---
+
+## Definition of done for Track B
+
+The following must work before Track B is considered complete:
+
+1. services.html loads in browser — green mic button visible bottom-right
+2. Click mic button — "Renewal of Regular License" offcanvas opens 
+   automatically
+3. Animated green pointer flies to Full Name field
+4. Full Name fills character by character with typewriter effect
+5. Status bubble shows Urdu confirmation text
+6. Pointer flies to CNIC field
+7. CNIC fills character by character
+8. Status bubble confirms again
+9. Wizard auto-advances through all three steps
+10. Success modal fires
+11. Entire flow runs in ~15 seconds without any keyboard input
+
+Track A is not required for any of the above. The three stub functions 
+(captureAndTranscribe, extractField, speakConfirmation) must exist in 
+the file but do nothing meaningful yet. Their contracts are fixed — 
+Track A will replace the internals without changing the function 
+signatures.
