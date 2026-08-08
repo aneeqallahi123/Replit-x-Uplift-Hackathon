@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dastak — Services</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="icon" href="assets/images/favicon.ico">
+
+    <style>
+        /* Scoped additions for this demo — the trio of DLIMS action buttons
+           sit as a flex sibling of the accordion-button; .custom-accordion
+           .accordion-header already uses justify-content:space-between,
+           which is what pushes them to the right edge like the live site. */
+        .dlims-header-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 8px 0;
+        }
+
+        .dlims-header-actions .btn {
+            font-size: 12.5px;
+            padding: 8px 16px;
+            white-space: nowrap;
+        }
+
+        .demo-banner {
+            background: #fff9e6;
+            border-left: 4px solid #f5bb18;
+            border-radius: 8px;
+            padding: 10px 16px;
+            font-size: 13px;
+            color: #6b5f2f;
+            margin-bottom: 24px;
+        }
+
+        .demo-note {
+            background: #f1f8f3;
+            border: 1px dashed #167B38;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 13px;
+            color: #167B38;
+            margin-top: 12px;
+            display: none;
+        }
+
+        .demo-note.show { display: block; }
+
+        .service-card-item.locked {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+
+<body class="home_3_body">
+
+    <section class="section-padding bg-white min-vh-100 pt-5">
+        <div class="container">
+
+            <div class="demo-banner">
+                <i class="fas fa-info-circle me-2"></i>
+                This is a static front-end recreation of the DLIMS Services accordion from
+                <strong>dastak.punjab.gov.pk/citizen/services</strong>. Forms are for UI demonstration only —
+                no data is submitted anywhere and no real license is generated or verified.
+            </div>
+
+            <div class="mb-4">
+                <h2 class="section-title">Services</h2>
+            </div>
+
+            <!-- Controls (Search - Toggle) -->
+            <div class="services-controls mb-4">
+                <div class="row g-3 align-items-center">
+                    <div class="col-lg-4 col-md-6">
+                        <div class="service-search-box position-relative-custom">
+                            <i class="fas fa-search"></i>
+                            <input class="home_page_search" type="search" placeholder="Search" autocomplete="off" disabled>
+                        </div>
+                    </div>
+                    <div class="col-lg-3 col-md-6">
+                        <div class="toggle-switch-wrapper">
+                            <button type="button" class="toggle-btn active" data-target="citizen">Citizen</button>
+                            <button type="button" class="toggle-btn" data-target="business">Business</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Services Accordion — DLIMS only -->
+            <div class="accordion custom-accordion" id="servicesAccordionCitizen">
+                <div class="accordion-item mb-3 border-0 overflow-hidden" data-department-key="DLIMS Services" data-dept-slug="dlims">
+                    <h2 class="accordion-header" id="headingCitizen1">
+                        <button class="accordion-button fw-bold py-3" type="button" data-bs-toggle="collapse"
+                            data-bs-target="#collapseCitizen1" aria-expanded="true" aria-controls="collapseCitizen1">
+                            <span class="ps-2">DLIMS Services</span>
+                        </button>
+
+                        <div class="dlims-header-actions">
+                            <button type="button" class="btn custom-btn-yellow" data-bs-toggle="offcanvas" data-bs-target="#trackdlimsOffcanvas">
+                                Track Application
+                            </button>
+                            <button type="button" class="btn custom-btn-yellow" data-bs-toggle="offcanvas" data-bs-target="#eLicenseOffcanvas">
+                                e-License
+                            </button>
+                            <button type="button" class="btn custom-btn-yellow" data-bs-toggle="offcanvas" data-bs-target="#VerifyOffcanvas">
+                                Verify License
+                            </button>
+                        </div>
+                    </h2>
+
+                    <div id="collapseCitizen1" class="accordion-collapse collapse show" aria-labelledby="headingCitizen1"
+                        data-bs-parent="#servicesAccordionCitizen">
+                        <div class="accordion-body p-4">
+                            <div class="row g-3" id="dlimsServiceRow">
+
+                                <div class="col-lg-3 col-md-4 col-sm-6">
+                                    <div class="service-card-item" data-service-key="learner_driving_license">
+                                        <div class="svc-icon"><img src="assets/images/learner_liceness.svg" class="img-fluid" alt=""></div>
+                                        <div class="svc-name">Learner Driving License</div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-3 col-md-4 col-sm-6">
+                                    <div class="service-card-item" data-service-key="renewal_learner_driving_license">
+                                        <div class="svc-icon"><img src="assets/images/learner_liceness.svg" class="img-fluid" alt=""></div>
+                                        <div class="svc-name">Renewal of Learners Driving License</div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-3 col-md-4 col-sm-6">
+                                    <div class="service-card-item" data-service-key="renewal_driving_license">
+                                        <div class="svc-icon"><img src="assets/images/regular_licsness_renew.svg" class="img-fluid" alt=""></div>
+                                        <div class="svc-name">Renewal of Regular License</div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-3 col-md-4 col-sm-6">
+                                    <div class="service-card-item" data-service-key="duplicate_driving_license">
+                                        <div class="svc-icon"><img src="assets/images/duplicate_licenes.svg" class="img-fluid" alt=""></div>
+                                        <div class="svc-name">Duplicate Driving License</div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-3 col-md-4 col-sm-6">
+                                    <div class="service-card-item" data-service-key="international_driving_license_duplicate">
+                                        <div class="svc-icon"><img src="assets/images/international_licenes.svg" class="img-fluid" alt=""></div>
+                                        <div class="svc-name">Duplicate International Driving License</div>
+                                    </div>
+                                </div>
+
+                                <div class="col-lg-3 col-md-4 col-sm-6">
+                                    <div class="service-card-item" data-service-key="international_driving_license">
+                                        <div class="svc-icon"><img src="assets/images/international_licenes.svg" class="img-fluid" alt=""></div>
+                                        <div class="svc-name">Renewal International Driving License</div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- ===================== e-License Offcanvas ===================== -->
+    <div class="offcanvas offcanvas-end common-canvas" tabindex="-1" id="eLicenseOffcanvas" aria-labelledby="eLicenseOffcanvasLabel">
+        <div class="offcanvas-header border-bottom bg_light_cs">
+            <h5 class="offcanvas-title" id="eLicenseOffcanvasLabel">e-License</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body p-4">
+            <div class="row g-3">
+                <div class="alert alert-danger mt-2 d-none" id="error_form"></div>
+                <div class="col-12 mb-2 mt-2 bg_check_box">
+                    <div class="d-flex gap-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="licenseType" id="regularLicense" value="regular" checked>
+                            <label class="form-check-label small fw-bold" for="regularLicense">Regular License</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="licenseType" id="internationalLicense" value="international">
+                            <label class="form-check-label small fw-bold" for="internationalLicense">International License</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label small fw-bold" id="cnicPassportLabel">Enter CNIC</label>
+                    <input type="text" class="form-control" id="cnicPassportInput" name="identity_number" maxlength="13"
+                        placeholder="CNIC without dashes. e.g (1111122222223)" autocomplete="off">
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label small fw-bold">Date of Birth</label>
+                    <input type="text" name="dob" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
+                </div>
+
+                <hr>
+
+                <div class="row math-captcha-wrapper">
+                    <div class="user-type mb-2 text-center">
+                        <strong class="math-question">Loading...</strong>
+                        <button type="button" class="btn btn-sm btn-link text-black reloadCaptcha">Reload</button>
+                    </div>
+                    <div class="user-type mb-2">
+                        <input type="text" class="form-control math-captcha-input" placeholder="Answer">
+                    </div>
+                    <div class="captcha_error text-danger text-center mt-1" style="display:none;"></div>
+                </div>
+
+                <div class="demo-note" id="eLicenseDemoNote">
+                    <i class="fas fa-flask me-1"></i> Demo mode — this form doesn't connect to a real backend, so no e-License is actually generated.
+                </div>
+            </div>
+        </div>
+        <div class="offcanvas-footer p-4 border-0 d-flex gap-3">
+            <button type="button" class="btn btn-light border fw-bold py-2 px-4" data-bs-dismiss="offcanvas">Cancel</button>
+            <button type="button" class="btn btn-warning w-100 fw-bold py-2" id="generateLicenseButton">Generate e-License</button>
+        </div>
+    </div>
+
+    <!-- ===================== Track License Offcanvas ===================== -->
+    <div class="offcanvas offcanvas-end common-canvas" tabindex="-1" id="trackdlimsOffcanvas" aria-labelledby="trackdlimsOffcanvasLabel">
+        <div class="offcanvas-header border-bottom bg_light_cs">
+            <h5 class="offcanvas-title" id="trackdlimsOffcanvasLabel">Track License</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body p-4">
+            <div class="row g-3">
+                <div class="alert alert-danger mt-2 d-none" id="error_form_verify"></div>
+
+                <div class="col-12">
+                    <label class="form-label small fw-bold">Enter CNIC</label>
+                    <input type="text" class="form-control" name="identity_number" maxlength="13"
+                        placeholder="CNIC without dashes. e.g (1111122222223)" autocomplete="off">
+                </div>
+                <hr>
+
+                <div class="row math-captcha-wrapper">
+                    <div class="user-type mb-2 text-center">
+                        <strong class="math-question">Loading...</strong>
+                        <button type="button" class="btn btn-sm btn-link text-black reloadCaptcha">Reload</button>
+                    </div>
+                    <div class="user-type mb-2">
+                        <input type="text" class="form-control math-captcha-input" placeholder="Answer">
+                    </div>
+                    <div class="captcha_error text-danger text-center mt-1" style="display:none;"></div>
+                </div>
+
+                <div class="demo-note" id="trackDemoNote">
+                    <i class="fas fa-flask me-1"></i> Demo mode — there's no real application to look up, so this can't return a genuine tracking result.
+                </div>
+            </div>
+        </div>
+        <div class="offcanvas-footer p-4 border-0 d-flex gap-3">
+            <button type="button" class="btn btn-light border fw-bold py-2 px-4" data-bs-dismiss="offcanvas">Cancel</button>
+            <button type="button" class="btn btn-warning w-100 fw-bold py-2" id="generateTrackButton">Track License</button>
+        </div>
+    </div>
+
+    <!-- ===================== Verify License Offcanvas ===================== -->
+    <div class="offcanvas offcanvas-end common-canvas" tabindex="-1" id="VerifyOffcanvas" aria-labelledby="VerifyOffcanvasLabel">
+        <div class="offcanvas-header border-bottom bg_light_cs">
+            <h5 class="offcanvas-title" id="VerifyOffcanvasLabel">Verify License</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+        </div>
+        <div class="offcanvas-body p-4">
+            <div class="row g-3">
+                <div class="alert alert-danger mt-2 d-none" id="error_form_v"></div>
+                <div class="col-12 mb-2 mt-2 bg_check_box">
+                    <div class="d-flex gap-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="verifylicenseType" id="verifyregularLicense" value="regular" checked>
+                            <label class="form-check-label small fw-bold" for="verifyregularLicense">Regular License</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="verifylicenseType" id="verifyinternationalLicense" value="international">
+                            <label class="form-check-label small fw-bold" for="verifyinternationalLicense">International License</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label small fw-bold" id="verifycnicPassportLabel">Enter CNIC</label>
+                    <input type="text" class="form-control" name="verify_identity_number" maxlength="13"
+                        placeholder="CNIC without dashes. e.g (1111122222223)" autocomplete="off">
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label small fw-bold">License Number</label>
+                    <input type="text" class="form-control" autocomplete="off">
+                </div>
+                <hr>
+
+                <div class="row math-captcha-wrapper">
+                    <div class="user-type mb-2 text-center">
+                        <strong class="math-question">Loading...</strong>
+                        <button type="button" class="btn btn-sm btn-link text-black reloadCaptcha">Reload</button>
+                    </div>
+                    <div class="user-type mb-2">
+                        <input type="text" class="form-control math-captcha-input" placeholder="Answer">
+                    </div>
+                    <div class="captcha_error text-danger text-center mt-1" style="display:none;"></div>
+                </div>
+
+                <div class="demo-note" id="verifyDemoNote">
+                    <i class="fas fa-flask me-1"></i> Demo mode — there's no license database behind this, so nothing is really verified.
+                </div>
+            </div>
+        </div>
+        <div class="offcanvas-footer p-4 border-0 d-flex gap-3">
+            <button type="button" class="btn btn-light border fw-bold py-2 px-4" data-bs-dismiss="offcanvas">Cancel</button>
+            <button type="button" class="btn btn-warning w-100 fw-bold py-2" id="verifyLicenseButton">Verify License</button>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/services-data.js?v=2"></script>
+    <script src="services.js?v=6"></script>
+</body>
+
+</html>

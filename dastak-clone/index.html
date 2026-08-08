@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dastak</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5.3 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Custom CSS (mirrors the live site's stylesheet) -->
+    <link rel="stylesheet" href="assets/css/style.css">
+
+    <link rel="icon" href="assets/images/favicon.ico">
+
+    <!-- Slick Slider CSS -->
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick.min.css" />
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick-theme.min.css" />
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+    <style>
+        .live-search-results {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            max-height: 450px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            display: none;
+            z-index: 9999999;
+            padding: 15px;
+            margin-top: 5px;
+        }
+
+        .position-relative-custom { position: relative; }
+        .services-controls { position: relative; z-index: 2; }
+
+        .search-department {
+            padding: 5px 15px 10px 15px;
+            font-weight: 600;
+            color: #4b5563;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .search-clear-icon {
+            right: 15px !important;
+            font-size: 16px;
+            color: #999;
+            cursor: pointer;
+            display: none;
+            z-index: 5;
+        }
+
+        .search-clear-icon:hover { color: #333; }
+        .home_page_search { padding-right: 40px; }
+
+        .explore_slide_item.hidden { display: none !important; }
+    </style>
+</head>
+
+<body class="home_3_body">
+
+    <!-- Preloader: "The Dastak" (Knock) -->
+    <div id="preloader">
+        <div class="door-panel left-panel"></div>
+        <div class="door-panel right-panel"></div>
+
+        <div class="preloader-content">
+            <div class="knocker-wrapper">
+                <div class="ripple r-1"></div>
+                <div class="ripple r-2"></div>
+                <div class="ripple r-3"></div>
+                <div class="logo-circle">
+                    <img src="assets/images/logo.svg" alt="Dastak" class="preloader-logo">
+                </div>
+            </div>
+            <p class="knocking-text">Dastak...</p>
+        </div>
+    </div>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg fixed-top home_3_header">
+        <div class="container-fluid">
+            <a class="navbar-brand navbrand_home_3" href="#top" id="top">
+                <img src="assets/images/logo.svg" alt="Dastak Logo">
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#dastakNavbar"
+                aria-controls="dastakNavbar">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="offcanvas-lg offcanvas-start menu_offcanvas" tabindex="-1" id="dastakNavbar"
+                aria-labelledby="dastakNavbarLabel">
+                <div class="offcanvas-header border-bottom">
+                    <h5 class="offcanvas-title" id="dastakNavbarLabel">
+                        <img src="assets/images/logo_new.svg" alt="Dastak Logo">
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#dastakNavbar"
+                        aria-label="Close"></button>
+                </div>
+                <div class="offcanvas-body p-4 p-lg-0">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0 custom-nav-links gap-lg-2">
+                        <li class="nav-item"><a class="nav-link active" href="#home">Home</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#about">About</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#govt_services">Services</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#partners">Our Partners</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#news">News</a></li>
+                        <li class="nav-item"><a class="nav-link" href="#contact">Contact</a></li>
+                    </ul>
+
+                    <div class="d-flex align-items-center flex-column flex-lg-row gap-3 mt-3 mt-lg-0 header-controls">
+                        <div class="custom-lang-toggle d-flex align-items-center gap-2 me-lg-2 order-2 order-lg-1">
+                            <a href="#" id="langEn"><span class="lang-text active">Eng</span></a>
+                            <div class="lang-switch-track" id="langToggle" style="cursor:pointer;">
+                                <div class="lang-switch-knob"></div>
+                            </div>
+                            <a href="#" id="langUr"><span class="lang-text urdu-font">اردو</span></a>
+                        </div>
+                        <div class="d-flex flex-column flex-md-row align-items-center gap-2 order-1 order-lg-2">
+                            <a href="#careers" class="btn custom-btn-outline">Become a Facilitator</a>
+                            <a href="#" class="btn custom-btn-solid">Register as Applicant</a>
+                            <a href="#" class="btn custom-btn-yellow">Login</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="home_3_hero" id="home">
+        <div class="container_fluid_hero position-relative">
+            <div class="row align-items-center">
+                <div class="col-lg-5 col-md-5 animate-on-scroll fade-right delay-200">
+                    <div class="hero_content_3">
+                        <div class="hero_logos mb-4">
+                            <img src="assets/images/logo.svg" alt="Dastak Logo" class="hero_main_logo">
+                        </div>
+
+                        <h2 class="hero_sub_title mb-1 animate-on-scroll fade-up delay-400">
+                            Your Online One-Window for All Government Services
+                        </h2>
+                        <h1 class="hero_main_title mb-4 animate-on-scroll fade-up delay-700">
+                            Just a Click Away
+                        </h1>
+
+                        <p class="hero_desc_text mb-5 animate-on-scroll fade-up delay-1000">
+                            Maryam Ki Dastak is Punjab's <strong class="text-success fw-bold">one-stop online platform</strong>
+                            that makes it easy for citizens to apply for government services online and choose between
+                            self-service or doorstep delivery by trained facilitators, <strong class="text-success fw-bold">all in one place.</strong>
+                        </p>
+
+                        <div class="hero_actions d-flex flex-wrap gap-3 animate-on-scroll fade-up delay-1300">
+                            <a href="#govt_services" class="btn btn_apply_service_hero">
+                                <span>Apply Service</span>
+                                <div class="btn_icon_box">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M7 17L17 7M17 7H7M17 7V17" stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round" />
+                                    </svg>
+                                </div>
+                            </a>
+                            <a href="#govt_services" class="btn btn_explore_services_hero">
+                                <span>Explore Services</span>
+                                <div class="btn_icon_box_outline">
+                                    <i class="fas fa-search"></i>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-7 col-md-7 text-end position-relative mt-2 mt-md-4 mt-lg-0 animate-on-scroll fade-left delay-400">
+                    <img src="assets/images/bb_art.png" class="img-fluid hero_artwork_main" alt="Hero Artwork">
+
+                    <div class="call_us_badge_hero animate-on-scroll zoom-in delay-600">
+                        <img src="assets/images/call_us_02.svg" alt="Call us at 1202" class="call_us_img">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Explore Available Services -->
+    <section class="section-padding bg-white explore_services" id="govt_services">
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-lg-8 animate-on-scroll fade-up services-controls">
+                    <h2 class="section-title text-center mb-3 section_title_one_line text_green">
+                        <strong>Explore</strong>
+                        <span class="fw-light">Available Services</span>
+                    </h2>
+                    <p class="text-muted text-center mb-4 mx-auto explore_desc" style="max-width: 650px; font-size: 15px;">
+                        Access a wide range of all government services choose what you need from the categories below and
+                        <strong class="text-dark">apply online</strong> or select
+                        <strong class="text-dark">doorstep delivery</strong> by a trained facilitator.
+                    </p>
+
+                    <div class="explore_search_wrap position-relative position-relative-custom mx-auto mb-5">
+                        <input class="form-control home_page_search" type="text" placeholder="Search Services..." autocomplete="off" id="serviceSearch">
+                        <i class="fas fa-search searc_icon_home position-absolute top-50 translate-middle-y" style="left: 16px; right: auto;"></i>
+                        <i class="fas fa-times search-clear-icon position-absolute top-50 translate-middle-y" style="right: 16px; left: auto;"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="position-relative animate-on-scroll fade-up delay-200">
+                <div class="row align-items-center position-relative">
+                    <div class="col-12 col-xl-11 pe-xl-0">
+                        <div class="explore_services_slider explore_slider_container pb-4" id="serviceGrid">
+                            <div class="explore_slide_item" data-name="dlims">
+                                <a href="#" class="explore_cat_card">
+                                    <div class="card_hover_blob"></div>
+                                    <div class="card_icon text-end ms-auto"><img src="assets/images/dlims_icon.png" class="img-fluid" alt="DLIMS"></div>
+                                    <h3 class="card_title mt-auto">DLIMS</h3>
+                                </a>
+                            </div>
+                            <div class="explore_slide_item" data-name="lahore development authority">
+                                <a href="#" class="explore_cat_card">
+                                    <div class="card_hover_blob"></div>
+                                    <div class="card_icon text-end ms-auto"><img src="assets/images/lda.png" class="img-fluid" alt="LDA" style="max-width: 50px;"></div>
+                                    <h3 class="card_title mt-auto">Lahore<br>Development<br>Authority</h3>
+                                </a>
+                            </div>
+                            <div class="explore_slide_item" data-name="excise taxation">
+                                <a href="#" class="explore_cat_card">
+                                    <div class="card_hover_blob"></div>
+                                    <div class="card_icon text-end ms-auto"><img src="assets/images/government-of-punjab.png" class="img-fluid" alt="Excise" style="max-width: 50px;"></div>
+                                    <h3 class="card_title mt-auto">Excise &<br>Taxation</h3>
+                                </a>
+                            </div>
+                            <div class="explore_slide_item" data-name="local government">
+                                <a href="#" class="explore_cat_card">
+                                    <div class="card_hover_blob"></div>
+                                    <div class="card_icon text-end ms-auto"><img src="assets/images/government-of-punjab.png" class="img-fluid" alt="Local" style="max-width: 50px;"></div>
+                                    <h3 class="card_title mt-auto">Local<br>Government</h3>
+                                </a>
+                            </div>
+                            <div class="explore_slide_item" data-name="board of revenue">
+                                <a href="#" class="explore_cat_card">
+                                    <div class="card_hover_blob"></div>
+                                    <div class="card_icon text-end ms-auto"><img src="assets/images/government-of-punjab.png" class="img-fluid" alt="Board" style="max-width: 50px;"></div>
+                                    <h3 class="card_title mt-auto">Board of<br>Revenue</h3>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-xl-1 d-none d-xl-flex justify-content-end position-absolute view_all_btn">
+                        <a href="#govt_services" class="explore_view_all text-nowrap">View All <i class="fas fa-arrow-right ms-1"></i></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- DLIMS Services Section -->
+    <section class="section-padding dlims-services-sec" id="dlims-services">
+        <div class="container">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-5 animate-on-scroll fade-right">
+                    <img src="assets/images/dlims_icon.png" alt="DLIMS Logo" class="mb-3 img-fluid dlims-services-logo">
+
+                    <h2 class="section-title mb-1 dlims-services-title">DLIMS Services</h2>
+                    <h3 class="mb-4 dlims-services-subtitle">now at Dastak - Web Platform</h3>
+
+                    <p class="mb-4 dlims-services-desc">All <span>DLIMS</span> services have been seamlessly migrated to
+                        <span>Dastak - Web Platform</span>. Apply for licenses, track applications, and access your previous records.</p>
+
+                    <div class="dlims-features-list mb-5 d-flex flex-column gap-3">
+                        <div class="d-flex align-items-center gap-2">
+                            <svg width="20" height="20" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M32.5837 17L29.127 13.0616L29.6087 7.84831L24.4945 6.68664L21.817 2.18164L17.0003 4.24997L12.1837 2.18164L9.50616 6.68664L4.39199 7.83414L4.87366 13.0475L1.41699 17L4.87366 20.9383L4.39199 26.1658L9.50616 27.3275L12.1837 31.8325L17.0003 29.75L21.817 31.8183L24.4945 27.3133L29.6087 26.1516L29.127 20.9383L32.5837 17ZM14.167 24.0833L8.50033 18.4166L10.4978 16.4191L14.167 20.0741L23.5028 10.7383L25.5003 12.75L14.167 24.0833Z" fill="#167B38" />
+                            </svg>
+                            <span class="dlims-feature-text">Apply for license service online</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <svg width="20" height="20" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M32.5837 17L29.127 13.0616L29.6087 7.84831L24.4945 6.68664L21.817 2.18164L17.0003 4.24997L12.1837 2.18164L9.50616 6.68664L4.39199 7.83414L4.87366 13.0475L1.41699 17L4.87366 20.9383L4.39199 26.1658L9.50616 27.3275L12.1837 31.8325L17.0003 29.75L21.817 31.8183L24.4945 27.3133L29.6087 26.1516L29.127 20.9383L32.5837 17ZM14.167 24.0833L8.50033 18.4166L10.4978 16.4191L14.167 20.0741L23.5028 10.7383L25.5003 12.75L14.167 24.0833Z" fill="#167B38" />
+                            </svg>
+                            <span class="dlims-feature-text">Track your applications in real-time</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <svg width="20" height="20" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M32.5837 17L29.127 13.0616L29.6087 7.84831L24.4945 6.68664L21.817 2.18164L17.0003 4.24997L12.1837 2.18164L9.50616 6.68664L4.39199 7.83414L4.87366 13.0475L1.41699 17L4.87366 20.9383L4.39199 26.1658L9.50616 27.3275L12.1837 31.8325L17.0003 29.75L21.817 31.8183L24.4945 27.3133L29.6087 26.1516L29.127 20.9383L32.5837 17ZM14.167 24.0833L8.50033 18.4166L10.4978 16.4191L14.167 20.0741L23.5028 10.7383L25.5003 12.75L14.167 24.0833Z" fill="#167B38" />
+                            </svg>
+                            <span class="dlims-feature-text">Access previous records after linking</span>
+                        </div>
+                    </div>
+
+                    <a href="#govt_services" class="btn btn_apply_service_hero w-fit">
+                        <span>Apply Service</span>
+                        <div class="btn_icon_box">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M7 17L17 7M17 7H7M17 7V17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+                            </svg>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="col-lg-7 animate-on-scroll fade-left delay-200">
+                    <div class="about_us_img_wrap text-center position-relative h-100 d-flex align-items-center justify-content-center">
+                        <img src="assets/images/laptop_dlims.png" alt="DLIMS Web Platform Interface" class="img-fluid position-relative dlims-services-img">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Connects Citizens -->
+    <section class="section-padding bg-white" id="about">
+        <div class="container">
+            <div class="row align-items-center g-5">
+                <div class="col-lg-6 animate-on-scroll fade-right">
+                    <span class="section_small_title animate-on-scroll fade-up">For the Citizen of Punjab</span>
+                    <h2 class="section-title animate-on-scroll fade-up delay-100 mb-3">
+                        Download Dastak <span class="bold_span_sec_title">Citizen App</span> <span class="mt-3">One Window, All Services</span>
+                    </h2>
+                    <p class="text-muted lead mb-4">Access a wide range of government services through a one-stop online app designed to make the process fast, simple, and convenient for every citizen.</p>
+                    <div class="qr_code_wrap d-flex align-items-end gap-3">
+                        <div class="d-flex gap-2">
+                            <div>
+                                <div class="qr-card mb-2"><img src="assets/images/dastak_qr_user_android.png" alt="QR" class="img-fluid"></div>
+                                <div class="text-center">
+                                    <a href="https://play.google.com/store/apps/details?id=pk.pitb.gov.dastakHomeDelivery" target="_blank">
+                                        <img src="assets/images/googleplay.png" class="img-fluid" />
+                                    </a>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="qr-card mb-2"><img src="assets/images/dastak_qr_user_apple.png" alt="QR" class="img-fluid"></div>
+                                <div class="text-center">
+                                    <a href="https://apps.apple.com/us/app/dastak-home-delivery/id6479348922" target="_blank">
+                                        <img src="assets/images/appstore.png" class="img-fluid" />
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="download_app_desc_info mb-0"><span>Dastak Citizen</span> App is available at Google Play Store and Apple App Store</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6 animate-on-scroll fade-left delay-200">
+                    <div class="about_us_img_wrap download_citizen_circle text-center position-relative h-100 d-flex align-items-center justify-content-center">
+                        <img src="assets/images/wildlife-department.png" alt="Citizens Connection" class="img-fluid wildlife-department-img">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Register Facilitator -->
+    <section class="section-padding bg-light" id="careers">
+        <div class="container animate-on-scroll fade-up">
+            <div class="row align-items-center g-5 flex-column-reverse flex-lg-row">
+                <div class="col-lg-5">
+                    <img src="assets/images/register_img.png" alt="Carrier" class="img-fluid register_img_urdu">
+                    <div class="qr_code_wrap d-flex align-items-end gap-3 mt-2">
+                        <div class="d-flex gap-2">
+                            <div>
+                                <div class="qr-card mb-2"><img src="assets/images/dastak_qr_android.png" alt="QR" class="img-fluid"></div>
+                                <div class="text-center">
+                                    <a href="https://play.google.com/store/apps/details?id=pk.pitb.gov.dastak">
+                                        <img src="assets/images/googleplay.png" class="img-fluid" />
+                                    </a>
+                                </div>
+                            </div>
+                            <div>
+                                <div class="qr-card mb-2"><img src="assets/images/dastak_qr_apple.png" alt="QR" class="img-fluid"></div>
+                                <div class="text-center">
+                                    <a href="https://apps.apple.com/us/app/dastak-facilitator/id6449545502">
+                                        <img src="assets/images/appstore.png" class="img-fluid" />
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="download_app_desc_info mb-0"><span>Dastak Facilitator</span> App is available at Google Play Store and Apple App Store</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-7">
+                    <span class="section_small_title animate-on-scroll fade-up">Easy and Quick Steps for</span>
+                    <h2 class="section-title mb-2 animate-on-scroll fade-up delay-100">
+                        How to register as a <span class="bold_span_sec_title">Facilitator</span>
+                    </h2>
+                    <p class="text-muted lead mb-3 mb-md-4 mb-lg-5">Get government services delivered to your home with a trained facilitator. Download now to experience convenience and trust in one app.</p>
+
+                    <div class="row justify-content-center process-wrapper animate-on-scroll">
+                        <div class="col process-step animate-on-scroll fade-up delay-100">
+                            <p class="step_process_tag top"><span>Dastak</span> Facilitator App</p>
+                            <div class="icon-circle dashed-green"><img src="assets/images/download_icon.svg" alt=""></div>
+                        </div>
+                        <div class="col process-step animate-on-scroll fade-up delay-200">
+                            <div class="icon-circle dashed-green"><img src="assets/images/create_profile.svg" alt=""></div>
+                            <p class="step_process_tag bottom"><span>Sign -</span> Up</p>
+                        </div>
+                        <div class="col process-step animate-on-scroll fade-up delay-300">
+                            <p class="step_process_tag top"><span>Fill</span> Form</p>
+                            <div class="icon-circle dashed-green"><img src="assets/images/select_service.svg" alt=""></div>
+                        </div>
+                        <div class="col process-step animate-on-scroll fade-up delay-400">
+                            <div class="icon-circle dashed-yellow"><img src="assets/images/submit_request.svg" alt=""></div>
+                            <p class="step_process_tag bottom"><span>Required</span> Documents</p>
+                        </div>
+                        <div class="col process-step animate-on-scroll fade-up delay-500">
+                            <p class="step_process_tag top"><span>Training by</span> PITB</p>
+                            <div class="icon-circle dashed-yellow"><img src="assets/images/cap.svg" alt=""></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Partners -->
+    <section class="section-padding bg-light" id="partners">
+        <div class="container animate-on-scroll fade-up">
+            <div class="row justify-content-center">
+                <div class="col-lg-9">
+                    <div class="row">
+                        <div class="col-lg-6 col-md-8">
+                            <h2 class="section-title text-start mb-2 animate-on-scroll fade-up">Our Partners & <span>Supporters</span></h2>
+                            <p class="text-muted lead mb-3 mb-md-4 mb-lg-5 text-start">
+                                Dastak is powered by collaboration with Punjab's leading government departments, ensuring citizens receive secure, timely, and authentic services.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="partners_slider_wrapper">
+                        <div class="partners_slider">
+                            <div class="partner-item">
+                                <div class="partner-box">
+                                    <div class="partner-icon-wrap"><img src="assets/images/govt_icon.svg" alt="Govt Icon" class="img-fluid"></div>
+                                    <h6 class="mb-0">Board of Revenue<br><span>Punjab</span></h6>
+                                </div>
+                            </div>
+                            <div class="partner-item">
+                                <div class="partner-box">
+                                    <div class="partner-icon-wrap"><img src="assets/images/govt_icon.svg" alt="Govt Icon" class="img-fluid"></div>
+                                    <h6 class="mb-0">Local Government &<br>Community, <span>Punjab</span></h6>
+                                </div>
+                            </div>
+                            <div class="partner-item">
+                                <div class="partner-box">
+                                    <div class="partner-icon-wrap"><img src="assets/images/govt_icon.svg" alt="Govt Icon" class="img-fluid"></div>
+                                    <h6 class="mb-0">Excise Taxation &<br>Narcotics Control, <span>Punjab</span></h6>
+                                </div>
+                            </div>
+                            <div class="partner-item">
+                                <div class="partner-box">
+                                    <div class="partner-icon-wrap"><img src="assets/images/govt_icon.svg" alt="Govt Icon" class="img-fluid"></div>
+                                    <h6 class="mb-0">Social Welfare<br><span>Department</span></h6>
+                                </div>
+                            </div>
+                            <div class="partner-item">
+                                <div class="partner-box">
+                                    <div class="partner-icon-wrap"><img src="assets/images/govt_icon.svg" alt="Govt Icon" class="img-fluid"></div>
+                                    <h6 class="mb-0">Police<br><span>Punjab</span></h6>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- News -->
+    <section class="section-padding latest_news_sec" id="news">
+        <div class="container animate-on-scroll fade-up">
+            <div class="row">
+                <div class="col-lg-5 col-md-6">
+                    <span class="section_small_title animate-on-scroll fade-up">DIRECT FROM THE BLOG POSTS</span>
+                    <h2 class="section-title sec_text_primary mb-2 animate-on-scroll fade-up delay-100">Latest News and <span>Articles</span></h2>
+                    <p class="text-muted lead">Stay informed with updates, insights, and stories on how Dastak is transforming public service delivery across Punjab.</p>
+                </div>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-4 animate-on-scroll zoom-in delay-100">
+                    <div class="card news-item h-100">
+                        <div class="p-2 pb-0"><img src="assets/images/blog_1.webp" class="card-img-top" alt="News" loading="lazy"></div>
+                        <div class="card-body p-4 d-flex flex-column">
+                            <p class="news_card_title mb-1">Transforming Public Service Delivery: "Dastak App"</p>
+                            <small class="small mb-3 text-muted">14 May</small>
+                            <p class="text-muted small mb-4">As Punjab experiences a surge in urbanization and population growth, the delivery of public services has become a formidable challenge, with citizens grappling with multiple issues in accessing government services....</p>
+                            <a href="#" class="news-link-btn mt-auto">Read More</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 animate-on-scroll zoom-in delay-200">
+                    <div class="card news-item h-100">
+                        <div class="p-2 pb-0"><img src="assets/images/blog_2.webp" class="card-img-top" alt="News" loading="lazy"></div>
+                        <div class="card-body p-4 d-flex flex-column">
+                            <p class="news_card_title mb-1">Pioneering Doorstep Delivery for a New Era</p>
+                            <small class="small mb-3 text-muted">14 May</small>
+                            <p class="text-muted small mb-4">Punjab embarks on a transformative journey in public service delivery with the launch of the Dastak app, designed to tackle challenges stemming from urbanization and population growth. The initiative addresses long-standing....</p>
+                            <a href="#" class="news-link-btn mt-auto">Read More</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 animate-on-scroll zoom-in delay-300">
+                    <div class="card news-item h-100">
+                        <div class="p-2 pb-0"><img src="assets/images/blog_3.webp" class="card-img-top" alt="News" loading="lazy"></div>
+                        <div class="card-body p-4 d-flex flex-column">
+                            <p class="news_card_title mb-1">Dastak App - Government Services at Your Doorstep</p>
+                            <small class="small mb-3 text-muted">14 May</small>
+                            <p class="text-muted small mb-4">The Dastak App is a step towards a smarter and more digital Pakistan. Say goodbye to long queues and experience convenience like never before...</p>
+                            <a href="#" class="news-link-btn mt-auto">Read More</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="pt-5 pb-4 bg-white" id="contact">
+        <div class="container animate-on-scroll fade-in">
+            <div class="row g-5">
+                <div class="col-lg-4">
+                    <img src="assets/images/logo_citizen.svg" alt="Footer Logo" class="mb-4 dastak_logo_footer">
+                    <div><img src="assets/images/govt_pun.svg" alt="Footer Logo" class="govt_logo_footer"></div>
+                </div>
+                <div class="col-lg-2 col-6">
+                    <h5 class="fw-bold mb-3">Menu</h5>
+                    <ul class="list-unstyled small text-dark d-flex flex-column gap-2">
+                        <li><a href="#home" class="text-decoration-none text-dark">Home</a></li>
+                        <li><a href="#govt_services" class="text-decoration-none text-dark">Services</a></li>
+                        <li><a href="#careers" class="text-decoration-none text-dark">Become a Facilitator</a></li>
+                        <li><a href="#partners" class="text-decoration-none text-dark">Our Partners</a></li>
+                        <li><a href="#" class="text-decoration-none text-dark">Fee Structure</a></li>
+                        <li><a href="#" class="text-decoration-none text-dark">Download</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-2 col-6">
+                    <h5 class="fw-bold mb-3">Departments</h5>
+                    <ul class="list-unstyled small text-dark d-flex flex-column gap-2">
+                        <li><a href="https://bor.punjab.gov.pk/" target="_blank" class="text-decoration-none text-dark">Board of Revenue</a></li>
+                        <li><a href="https://lgcd.punjab.gov.pk/" target="_blank" class="text-decoration-none text-dark">Local Government Dpt.</a></li>
+                        <li><a href="https://excise.punjab.gov.pk/" target="_blank" class="text-decoration-none text-dark">Excise Taxation & Narcotics Control</a></li>
+                    </ul>
+                </div>
+                <div class="col-lg-4">
+                    <h5 class="fw-bold mb-3">Contact</h5>
+                    <ul class="list-unstyled small text-dark d-flex flex-column gap-3">
+                        <li class="d-flex gap-3"><i class="fas fa-envelope text-success mt-1"></i><span>support@dastak.punjab.gov.pk</span></li>
+                        <li class="d-flex gap-3"><i class="fas fa-phone-alt text-success mt-1"></i><span>1202</span></li>
+                    </ul>
+                    <div class="d-flex gap-2 footer_social_icons mt-4">
+                        <a href="https://twitter.com/PITB_Official" target="_blank" class="btn btn-light rounded-circle"><i class="fab fa-twitter"></i></a>
+                        <a href="https://www.facebook.com/PunjabITBoard" target="_blank" class="btn btn-light rounded-circle"><i class="fab fa-facebook-f"></i></a>
+                        <a href="https://www.youtube.com/c/PunjabITBoardOfficial" target="_blank" class="btn btn-light rounded-circle"><i class="fab fa-youtube"></i></a>
+                        <a href="https://www.instagram.com/pitbofficial/" target="_blank" class="btn btn-light rounded-circle"><i class="fab fa-instagram"></i></a>
+                    </div>
+                </div>
+            </div>
+            <div class="text-center small text-muted mt-3 pt-3">© 2026 Dastak Services. All rights reserved.</div>
+        </div>
+    </footer>
+
+    <!-- Scroll Up Button -->
+    <button id="scrollUpBtn" class="scroll-up-btn" title="Go to top"><i class="fas fa-arrow-up"></i></button>
+
+    <!-- Slick Slider JS -->
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
