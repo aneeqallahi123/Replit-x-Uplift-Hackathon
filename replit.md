@@ -7,6 +7,24 @@ A demo recreation of the Dastak (Punjab government services) portal with "Maryam
 - Workflow "Start application" runs `node server.js` (Express, port 5000).
 - Frontend is static, served from `dastak-clone/` (index.html, services.html, apply.html).
 - Dependencies: `npm install` (express only).
+- On boot the server logs the resolved Uplift base URL. Set the `UPLIFT_BASE`
+  Replit Secret to `https://ap-southeast-1.api.upliftai.org/v1` to use the
+  Singapore region (lower latency from Pakistan); unset it to fall back to the
+  US default. The assistant ID has not been verified to resolve in Singapore —
+  if `/api/session` starts 404ing, remove the secret and restart.
+
+### Syncing the remote assistant
+The agent's system prompt and tool declarations live on the remote Uplift
+assistant, not in this repo. After changing the guided flow, run — from Replit,
+where `UPLIFT_API_KEY` exists in Secrets:
+
+```bash
+node scripts/sync-assistant.js --dry-run   # review the diff first
+node scripts/sync-assistant.js             # apply it
+```
+
+The script is idempotent. Anchor mismatches are warnings, not failures — if it
+warns, review that section by hand in the Uplift dashboard.
 
 ## Architecture
 - `server.js` — minimal Express static server; `/api/config` is a stub.
