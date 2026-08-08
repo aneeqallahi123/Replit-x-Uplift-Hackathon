@@ -431,73 +431,109 @@
     style.textContent = `
       #maryam-pointer {
         position: fixed;
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        border: 3px solid #167B38;
-        box-shadow: 0 0 0 4px rgba(22,123,56,0.15),
-                    0 0 16px rgba(22,123,56,0.4);
+        border-radius: 14px;
+        border: 3px solid var(--secondary-color, #f5bb18);
+        box-shadow: 0 0 0 4px rgba(245,187,24,0.20),
+                    0 0 22px rgba(13,107,57,0.35);
+        background: rgba(245,187,24,0.06);
         pointer-events: none;
         display: none;
         z-index: 99999;
-        transition: left 0.5s cubic-bezier(0.25,0.46,0.45,0.94),
-                    top  0.5s cubic-bezier(0.25,0.46,0.45,0.94);
+        transition: left 0.4s cubic-bezier(0.25,0.46,0.45,0.94),
+                    top  0.4s cubic-bezier(0.25,0.46,0.45,0.94),
+                    width 0.4s cubic-bezier(0.25,0.46,0.45,0.94),
+                    height 0.4s cubic-bezier(0.25,0.46,0.45,0.94);
       }
       #maryam-pointer.active { display: block; }
       #maryam-pointer.pulse {
-        animation: maryamPulse 0.4s ease-out;
+        animation: maryamPulse 0.5s ease-out;
       }
       @keyframes maryamPulse {
-        0%   { transform: scale(1);   }
-        50%  { transform: scale(1.5); }
-        100% { transform: scale(1);   }
+        0%   { box-shadow: 0 0 0 4px rgba(245,187,24,0.55), 0 0 22px rgba(13,107,57,0.5); }
+        70%  { box-shadow: 0 0 0 12px rgba(245,187,24,0), 0 0 30px rgba(13,107,57,0.25); }
+        100% { box-shadow: 0 0 0 4px rgba(245,187,24,0.20), 0 0 22px rgba(13,107,57,0.35); }
       }
       #maryam-status {
         position: fixed;
-        bottom: 90px;
+        bottom: 98px;
         right: 24px;
-        background: #167B38;
-        color: white;
-        padding: 8px 16px;
-        border-radius: 20px;
-        font-size: 13px;
-        font-family: 'Outfit', sans-serif;
+        background: #ffffff;
+        color: var(--primary-color, #0d6b39);
+        padding: 10px 18px;
+        border-radius: 16px;
+        font-size: 13.5px;
+        font-weight: 600;
+        font-family: 'Manrope', 'Outfit', sans-serif;
         display: none;
-        max-width: 280px;
-        text-align: right;
+        align-items: center;
+        max-width: 260px;
+        line-height: 1.4;
+        text-align: left;
+        direction: ltr;
         z-index: 99998;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        border: 1px solid rgba(13,107,57,0.10);
+        box-shadow: 0 12px 28px rgba(13,107,57,0.18), 0 2px 8px rgba(0,0,0,0.06);
+      }
+      #maryam-status.visible { display: flex; }
+      #maryam-status::after {
+        content: '';
+        position: absolute;
+        bottom: -7px;
+        right: 28px;
+        width: 14px;
+        height: 14px;
+        background: #ffffff;
+        border-right: 1px solid rgba(13,107,57,0.10);
+        border-bottom: 1px solid rgba(13,107,57,0.10);
+        transform: rotate(45deg);
       }
       #maryam-mic-btn {
         position: fixed;
         bottom: 24px;
         right: 24px;
-        width: 60px;
-        height: 60px;
+        width: 64px;
+        height: 64px;
         border-radius: 50%;
-        background: #167B38;
-        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(145deg, var(--primary-color, #0d6b39), #0a5a30);
+        border: 3px solid #ffffff;
         color: white;
-        font-size: 22px;
+        font-size: 24px;
+        line-height: 1;
         cursor: pointer;
         z-index: 99998;
-        box-shadow: 0 4px 16px rgba(22,123,56,0.5);
-        transition: transform 0.2s, background 0.2s;
+        box-shadow: 0 10px 26px rgba(13,107,57,0.45);
+        transition: transform 0.2s ease, background 0.3s ease, box-shadow 0.3s ease;
       }
       #maryam-mic-btn:hover {
-        transform: scale(1.08);
-        background: #125e2e;
+        transform: scale(1.07);
       }
       #maryam-mic-btn.connected {
-        background: #167B38;
+        background: linear-gradient(145deg, var(--primary-color, #0d6b39), #0a5a30);
+        box-shadow: 0 10px 26px rgba(13,107,57,0.45), 0 0 0 4px rgba(245,187,24,0.28);
       }
       #maryam-mic-btn.connecting {
-        background: #999;
-        animation: maryamConnecting 1s infinite;
+        background: linear-gradient(145deg, #9aa39a, #7c847c);
+        animation: maryamConnecting 1.1s ease-in-out infinite;
+      }
+      #maryam-mic-btn.listening {
+        box-shadow: 0 10px 26px rgba(13,107,57,0.45), 0 0 0 10px rgba(245,187,24,0.35);
+      }
+      #maryam-mic-btn.speaking {
+        box-shadow: 0 10px 26px rgba(13,107,57,0.45), 0 0 0 10px rgba(13,107,57,0.20);
+      }
+      #maryam-mic-btn.muted {
+        background: linear-gradient(145deg, #c9971a, #a3780e);
+      }
+      #maryam-mic-btn.error {
+        background: linear-gradient(145deg, #d9534f, #a83232);
+        box-shadow: 0 10px 26px rgba(217,83,79,0.4);
       }
       @keyframes maryamConnecting {
-        0%, 100% { opacity: 1; }
-        50%       { opacity: 0.5; }
+        0%, 100% { box-shadow: 0 10px 26px rgba(13,107,57,0.25); }
+        50%      { box-shadow: 0 10px 32px rgba(13,107,57,0.55); }
       }
       .field-highlight {
         outline: 2.5px solid #167B38 !important;
@@ -521,7 +557,7 @@
 
     const micBtn = document.createElement('button');
     micBtn.id = 'maryam-mic-btn';
-    micBtn.title = 'مریم سے بات کریں';
+    micBtn.title = 'Talk to Maryam';
     micBtn.textContent = '🎤';
     micBtn.classList.add('connecting');
     document.body.appendChild(micBtn);
@@ -535,7 +571,11 @@
     const el = document.getElementById('maryam-status');
     if (!el) return;
     el.textContent = text;
-    el.style.display = show === false ? 'none' : 'block';
+    if (show === false || !text) {
+      el.classList.remove('visible');
+    } else {
+      el.classList.add('visible');
+    }
   }
 
   // Deliberately NOT awaited by the pointing paths — the dot animates
@@ -552,14 +592,18 @@
     await delay(150);
 
     const rect = el.getBoundingClientRect();
-    const x = rect.left + rect.width / 2 - 22;
-    const y = rect.top + rect.height / 2 - 22;
-
-    pointer.style.left = x + 'px';
-    pointer.style.top = y + 'px';
+    const pad = POINTER_PADDING_PX;
+    pointer.style.left = (rect.left - pad) + 'px';
+    pointer.style.top = (rect.top - pad) + 'px';
+    pointer.style.width = (rect.width + pad * 2) + 'px';
+    pointer.style.height = (rect.height + pad * 2) + 'px';
     pointer.classList.add('active');
     await delay(150);
   }
+
+  // Padding (px) added around the target element's box when drawing the
+  // highlight frame around it.
+  const POINTER_PADDING_PX = 8;
 
   function triggerPulse() {
     const pointer = document.getElementById('maryam-pointer');
@@ -1151,7 +1195,7 @@
   }
 
   async function handleGuideNextStep() {
-    showToolBadge('🧭 اگلا قدم');
+    showToolBadge('🧭 Next step');
     return executeCurrentFlowStep();
   }
 
@@ -1386,15 +1430,16 @@
     movePointerTo(el);
     triggerPulse();
 
-    // Show Urdu status
+    // Show an English status label — the labels themselves are only ever
+    // UI chrome; Maryam's spoken guidance stays in Urdu separately.
     const labelMap = {};
     const pageConfig = SITE_CONFIG[getCurrentPageKey()];
     if (pageConfig && pageConfig.elements) {
       pageConfig.elements.forEach((e) => {
-        labelMap[e.element_id] = e.label_ur || e.label_en || e.label;
+        labelMap[e.element_id] = e.label_en || e.label_ur || e.label;
       });
     }
-    setStatus('یہاں کلک کریں: ' + (labelMap[selector] || selector));
+    setStatus('Click here: ' + (labelMap[selector] || selector));
 
     // Wait for the CITIZEN to click the element (never auto-click).
     return new Promise((resolve) => {
@@ -1432,8 +1477,11 @@
         const rect = el.getBoundingClientRect();
         const pointer = document.getElementById('maryam-pointer');
         if (!pointer) return;
-        pointer.style.left = (rect.left + rect.width / 2 - 22) + 'px';
-        pointer.style.top = (rect.top + rect.height / 2 - 22) + 'px';
+        const pad = POINTER_PADDING_PX;
+        pointer.style.left = (rect.left - pad) + 'px';
+        pointer.style.top = (rect.top - pad) + 'px';
+        pointer.style.width = (rect.width + pad * 2) + 'px';
+        pointer.style.height = (rect.height + pad * 2) + 'px';
       }
 
       window.addEventListener('scroll', reposition, true);
@@ -1790,7 +1838,7 @@
 
   // Shown via setStatus whenever autoplay is blocked, so the citizen is
   // never left with unexplained silence.
-  const AUDIO_BLOCKED_MSG = 'مریم کی آواز سننے کے لیے اسکرین پر ٹیپ کریں';
+  const AUDIO_BLOCKED_MSG = 'Tap the screen to hear Maryam';
 
   function attachAudioTrack(track) {
     const audioEl = track.attach();
@@ -1853,15 +1901,15 @@
     var nudge = document.createElement('div');
     nudge.id = 'maryam-audio-nudge';
     nudge.setAttribute('style', [
-      'position:fixed', 'bottom:90px', 'right:20px',
-      'background:#1a5c2e', 'color:#fff', 'padding:10px 18px',
+      'position:fixed', 'bottom:98px', 'right:20px',
+      'background:#0d6b39', 'color:#fff', 'padding:10px 18px',
       'border-radius:24px', 'font-size:13px', 'font-weight:600',
       'z-index:99999', 'cursor:pointer',
-      'box-shadow:0 4px 14px rgba(0,0,0,.35)',
+      'box-shadow:0 10px 24px rgba(13,107,57,.4)',
       'animation:maryamNudgePulse 1.5s ease-in-out infinite',
-      'direction:rtl', 'font-family:inherit'
+      'direction:ltr', 'font-family:Manrope,inherit'
     ].join(';'));
-    nudge.textContent = '🔊 مریم کی آواز سننے کے لیے یہاں ٹیپ کریں';
+    nudge.textContent = '🔊 Tap here to hear Maryam';
     nudge.addEventListener('click', function () {
       retryFn();
       clearAudioNudge();
@@ -1966,10 +2014,11 @@
       const btn = document.getElementById('maryam-mic-btn');
       if (btn) {
         btn.textContent = '⚠️';
-        btn.style.background = '#e53e3e';
-        btn.title = 'کنکشن ٹوٹ گیا — دوبارہ کلک کریں';
+        btn.classList.remove('connected', 'listening', 'speaking');
+        btn.classList.add('error');
+        btn.title = 'Connection lost — click to reconnect';
       }
-      setStatus('کنکشن ٹوٹ گیا — دوبارہ کلک کریں', true);
+      setStatus('Connection lost — click to reconnect', true);
     });
 
     // ── Speaking indicators: log + visual feedback ───────────
@@ -1990,14 +2039,14 @@
         if (!maryamAudioPlaying && window._maryamRetryAudio) {
           window._maryamRetryAudio();
         }
-        setStatus('سن رہی ہوں...', true);
-        if (btn) btn.style.boxShadow = '0 0 0 8px rgba(22,123,56,0.3)';
+        setStatus('Listening...', true);
+        if (btn) { btn.classList.add('listening'); btn.classList.remove('speaking'); }
       } else if (agentSpeaking) {
-        setStatus('مریم بول رہی ہے...', true);
-        if (btn) btn.style.boxShadow = '0 0 0 8px rgba(22,123,56,0.1)';
+        setStatus('Maryam is speaking...', true);
+        if (btn) { btn.classList.add('speaking'); btn.classList.remove('listening'); }
       } else {
         setStatus('', false);
-        if (btn) btn.style.boxShadow = '0 4px 16px rgba(22,123,56,0.5)';
+        if (btn) { btn.classList.remove('listening', 'speaking'); }
       }
     });
 
@@ -2053,15 +2102,14 @@
 
     // Update button to connected state
     if (micBtn) {
-      micBtn.classList.remove('connecting');
+      micBtn.classList.remove('connecting', 'error', 'muted');
       micBtn.classList.add('connected');
       micBtn.textContent = '🎤';
-      micBtn.style.background = '#167B38';
       micBtn.disabled = false;
-      micBtn.title = 'مریم سن رہی ہے — کلک کریں مائیک بند کرنے کے لیے';
+      micBtn.title = 'Maryam is listening — click to mute';
     }
 
-    setStatus('مریم تیار ہے — بولیں', true);
+    setStatus('Maryam is ready — start speaking', true);
 
     // Tell the agent what page it's on — critical after guided
     // navigation so it resumes the flow instead of guessing.
@@ -2107,7 +2155,7 @@
 
     micBtn.classList.remove('connecting');
     micBtn.textContent = '🎤';
-    micBtn.title = 'مریم سے بات کریں';
+    micBtn.title = 'Talk to Maryam';
 
     micBtn.addEventListener('click', async () => {
       // If already connected — toggle mute
@@ -2115,8 +2163,8 @@
         const isOn = maryamRoom.localParticipant.isMicrophoneEnabled;
         await maryamRoom.localParticipant.setMicrophoneEnabled(!isOn);
         micBtn.textContent = !isOn ? '🎤' : '🔇';
-        micBtn.style.background = !isOn ? '#167B38' : '#e53e3e';
-        setStatus(!isOn ? 'مائیک آن' : 'مائیک آف', true);
+        micBtn.classList.toggle('muted', isOn);
+        setStatus(!isOn ? 'Mic on' : 'Mic off', true);
         await delay(1500);
         setStatus('', false);
         return;
@@ -2126,17 +2174,17 @@
       micBtn.disabled = true;
       micBtn.textContent = '⏳';
       micBtn.classList.add('connecting');
-      setStatus('مریم سے جڑ رہے ہیں...', true);
+      setStatus('Connecting to Maryam...', true);
 
       try {
         await connectAndRegisterTools();
       } catch (err) {
         console.error('[Maryam] Connection failed:', err);
         micBtn.classList.remove('connecting');
+        micBtn.classList.add('error');
         micBtn.textContent = '⚠️';
-        micBtn.style.background = '#e53e3e';
         micBtn.disabled = false;
-        setStatus('کنکشن ناکام — دوبارہ کلک کریں', true);
+        setStatus('Connection failed — click to retry', true);
         // A stale saved session may be the cause — clear it so the
         // retry click creates a fresh one.
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
@@ -2160,7 +2208,7 @@
     const saved = loadSavedSession();
     if (saved) {
       setTimeout(async () => {
-        setStatus('مریم سے دوبارہ جڑ رہے ہیں...', true);
+        setStatus('Reconnecting to Maryam...', true);
         const micBtn = document.getElementById('maryam-mic-btn');
         if (micBtn) {
           micBtn.textContent = '⏳';
@@ -2180,8 +2228,9 @@
             if (micBtn) {
               micBtn.textContent = '⚠️';
               micBtn.classList.remove('connecting');
+              micBtn.classList.add('error');
             }
-            setStatus('کنکشن ناکام — مائیک بٹن دبائیں', true);
+            setStatus('Connection failed — press the mic button', true);
           }
         }
       }, 800);
