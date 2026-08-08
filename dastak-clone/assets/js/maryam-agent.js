@@ -292,6 +292,11 @@
     };
     const url = urlMap[payload.page];
     if (!url) return { navigated: false, error: 'Unknown page: ' + payload.page };
+
+    // Flag so the next page auto-reconnects without another click
+    const saved = loadSavedSession();
+    if (saved) saveSession({ ...saved, agentNavigated: true });
+
     window.location.href = url;
     return { navigated: true, target: url };
   }
@@ -503,133 +508,206 @@
   // -------------------------------------------------------------------
   // SECTION 8 — LiveKit connection and RPC registration
   //
-  // Chrome's autoplay policy blocks AudioContext creation unless it
-  // happens inside a user-gesture handler. We therefore do NOT connect
-  // on page load — we wait for the citizen to click the mic button.
-  // On subsequent page navigations we check whether a saved session
-  // token exists and auto-reconnect (the first-page click already
-  // satisfied the gesture requirement for that tab session).
+  // Two browser constraints shape this section:
+  //  1. Mic — Chrome blocks AudioContext creation unless it happens in
+  //     a user-gesture handler, so we connect on mic-button click.
+  //  2. Audio playback — Maryam's voice arrives as a LiveKit remote
+  //     audio track that must be attached to an <audio> element and
+  //     played, or her responses are silently discarded.
   // -------------------------------------------------------------------
-  let _room = null; // shared room reference across helpers
+  let maryamRoom = null;
+  let maryamConnected = false;
+
+  function attachAudioTrack(track) {
+    const audioEl = track.attach();
+    audioEl.id = 'maryam-audio-output';
+    // Must be in the DOM for some browsers to play
+    audioEl.style.display = 'none';
+    document.body.appendChild(audioEl);
+
+    // Autoplay safety net — retry on next user click if blocked
+    audioEl.play().catch((err) => {
+      console.warn('[Maryam] Autoplay blocked — will retry on next click:', err);
+      function retryPlay() {
+        audioEl.play()
+          .then(() => {
+            console.log('[Maryam] Audio playback started after user gesture');
+            document.removeEventListener('click', retryPlay);
+          })
+          .catch((e) => {
+            console.warn('[Maryam] Retry also failed:', e);
+          });
+      }
+      document.addEventListener('click', retryPlay);
+    });
+  }
 
   async function connectAndRegisterTools() {
     if (typeof LivekitClient === 'undefined') {
-      console.error('[Maryam] LivekitClient not loaded.');
-      return;
+      throw new Error('LivekitClient not loaded');
     }
 
     const micBtn = document.getElementById('maryam-mic-btn');
+    console.log('[Maryam] Getting session...');
 
-    try {
-      const session = await getOrResumeSession();
-      const room = new LivekitClient.Room();
-      _room = room;
+    const session = await getOrResumeSession();
+    console.log('[Maryam] Session ready. wsUrl:', session.wsUrl ? 'ok' : 'MISSING');
 
-      // Register all four RPC tools
-      room.localParticipant.registerRpcMethod(
-        'get_page_context',
-        async () => JSON.stringify(handleGetPageContext())
-      );
+    const room = new LivekitClient.Room();
+    maryamRoom = room;
 
-      room.localParticipant.registerRpcMethod(
-        'navigate_to_page',
-        async (data) => {
-          const payload = JSON.parse(data.payload);
-          const args = payload.arguments
-            ? payload.arguments.raw_arguments : payload;
-          return JSON.stringify(handleNavigateToPage(args));
-        }
-      );
-
-      room.localParticipant.registerRpcMethod(
-        'point_to_element',
-        async (data) => {
-          const payload = JSON.parse(data.payload);
-          const args = payload.arguments
-            ? payload.arguments.raw_arguments : payload;
-          return JSON.stringify(await handlePointToElement(args));
-        }
-      );
-
-      room.localParticipant.registerRpcMethod(
-        'fill_field',
-        async (data) => {
-          const payload = JSON.parse(data.payload);
-          const args = payload.arguments
-            ? payload.arguments.raw_arguments : payload;
-          return JSON.stringify(await handleFillField(args));
-        }
-      );
-
-      await room.connect(session.wsUrl, session.token);
-      console.log('[Maryam] Connected on:', getCurrentPageKey());
-
-      // Enable mic — this is always called from inside a click handler
-      // (first connect) or a recognised resume (subsequent pages), so
-      // the AudioContext is allowed by Chrome.
-      await room.localParticipant.setMicrophoneEnabled(true);
-
-      // Update mic button to show connected/live state
-      if (micBtn) {
-        micBtn.classList.remove('connecting');
-        micBtn.classList.add('connected');
-        micBtn.textContent = '🎤';
-        micBtn.title = 'مریم سے بات کر رہے ہیں — کلک کریں مائیک بند کرنے کے لیے';
-        micBtn.onclick = async () => {
-          const isMuted = !room.localParticipant.isMicrophoneEnabled;
-          await room.localParticipant.setMicrophoneEnabled(isMuted);
-          micBtn.textContent = isMuted ? '🎤' : '🔇';
-          micBtn.style.background = isMuted ? '#167B38' : '#e53e3e';
-        };
+    // ── Register RPC tools ──────────────────────────────────
+    room.localParticipant.registerRpcMethod(
+      'get_page_context',
+      async () => JSON.stringify(handleGetPageContext())
+    );
+    room.localParticipant.registerRpcMethod(
+      'navigate_to_page',
+      async (data) => {
+        const payload = JSON.parse(data.payload);
+        const args = payload.arguments ? payload.arguments.raw_arguments : payload;
+        return JSON.stringify(handleNavigateToPage(args));
       }
-    } catch (err) {
-      console.error('[Maryam] Connection failed:', err);
-      if (micBtn) {
-        micBtn.classList.remove('connecting');
-        micBtn.style.background = '#e53e3e';
-        micBtn.title = 'کنکشن ناکام — دوبارہ لوڈ کریں';
-        micBtn.textContent = '⚠️';
-        // Allow retry on click
-        micBtn.onclick = () => {
-          sessionStorage.removeItem('maryam_session');
-          window.location.reload();
-        };
+    );
+    room.localParticipant.registerRpcMethod(
+      'point_to_element',
+      async (data) => {
+        const payload = JSON.parse(data.payload);
+        const args = payload.arguments ? payload.arguments.raw_arguments : payload;
+        return JSON.stringify(await handlePointToElement(args));
       }
+    );
+    room.localParticipant.registerRpcMethod(
+      'fill_field',
+      async (data) => {
+        const payload = JSON.parse(data.payload);
+        const args = payload.arguments ? payload.arguments.raw_arguments : payload;
+        return JSON.stringify(await handleFillField(args));
+      }
+    );
+
+    // ── Connect to room ─────────────────────────────────────
+    await room.connect(session.wsUrl, session.token);
+    console.log('[Maryam] Room connected on:', getCurrentPageKey());
+
+    // ── Attach incoming audio (Maryam's voice) ──────────────
+    room.on(LivekitClient.RoomEvent.TrackSubscribed, (track) => {
+      if (track.kind === LivekitClient.Track.Kind.Audio) {
+        console.log('[Maryam] Audio track received — attaching playback');
+        attachAudioTrack(track);
+      }
+    });
+
+    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+      if (track.kind === LivekitClient.Track.Kind.Audio) {
+        track.detach().forEach((el) => el.remove());
+        console.log('[Maryam] Audio track detached and removed');
+      }
+    });
+
+    // Handle tracks already subscribed before the listener was added
+    // (can happen on session resume)
+    room.remoteParticipants.forEach((participant) => {
+      participant.trackPublications.forEach((pub) => {
+        if (pub.track && pub.track.kind === LivekitClient.Track.Kind.Audio) {
+          attachAudioTrack(pub.track);
+        }
+      });
+    });
+
+    // ── Enable mic (user gesture context — safe here) ───────
+    await room.localParticipant.setMicrophoneEnabled(true);
+    console.log('[Maryam] Microphone enabled');
+
+    maryamConnected = true;
+
+    // Update button to connected state
+    if (micBtn) {
+      micBtn.classList.remove('connecting');
+      micBtn.classList.add('connected');
+      micBtn.textContent = '🎤';
+      micBtn.style.background = '#167B38';
+      micBtn.disabled = false;
+      micBtn.title = 'مریم سن رہی ہے — کلک کریں مائیک بند کرنے کے لیے';
     }
+
+    setStatus('مریم تیار ہے — بولیں', true);
+    await delay(2000);
+    setStatus('', false);
   }
 
   // -------------------------------------------------------------------
   // SECTION 9 — Boot on DOMContentLoaded
   //
-  // If a saved session exists from a previous page (citizen already
-  // clicked the mic button and Maryam navigated here), auto-reconnect
-  // — the user gesture already happened on the previous page and the
-  // same tab session satisfies Chrome's autoplay requirement.
-  //
-  // If no saved session, show the mic button in idle state and connect
-  // only when the citizen clicks it (satisfying the user-gesture rule).
+  // Only injects UI on load. Connects on mic-button click (the user
+  // gesture). Auto-reconnects only when the agent itself navigated to
+  // this page (agentNavigated flag) — the original click on the first
+  // page already satisfied the gesture requirement for this tab.
   // -------------------------------------------------------------------
+  function bindMicButton() {
+    const micBtn = document.getElementById('maryam-mic-btn');
+    if (!micBtn) return;
+
+    micBtn.classList.remove('connecting');
+    micBtn.textContent = '🎤';
+    micBtn.title = 'مریم سے بات کریں';
+
+    micBtn.addEventListener('click', async () => {
+      // If already connected — toggle mute
+      if (maryamConnected && maryamRoom) {
+        const isOn = maryamRoom.localParticipant.isMicrophoneEnabled;
+        await maryamRoom.localParticipant.setMicrophoneEnabled(!isOn);
+        micBtn.textContent = !isOn ? '🎤' : '🔇';
+        micBtn.style.background = !isOn ? '#167B38' : '#e53e3e';
+        setStatus(!isOn ? 'مائیک آن' : 'مائیک آف', true);
+        await delay(1500);
+        setStatus('', false);
+        return;
+      }
+
+      // First click — connect (this IS the user gesture)
+      micBtn.disabled = true;
+      micBtn.textContent = '⏳';
+      micBtn.classList.add('connecting');
+      setStatus('مریم سے جڑ رہے ہیں...', true);
+
+      try {
+        await connectAndRegisterTools();
+      } catch (err) {
+        console.error('[Maryam] Connection failed:', err);
+        micBtn.classList.remove('connecting');
+        micBtn.textContent = '⚠️';
+        micBtn.style.background = '#e53e3e';
+        micBtn.disabled = false;
+        setStatus('کنکشن ناکام — دوبارہ کلک کریں', true);
+        // A stale saved session may be the cause — clear it so the
+        // retry click creates a fresh one.
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     injectPointerStylesOnce();
     injectPointerElements();
+    bindMicButton();
 
-    const micBtn = document.getElementById('maryam-mic-btn');
-    const hasSavedSession = !!loadSavedSession();
-
-    if (hasSavedSession) {
-      // Previous page triggered the gesture; safe to reconnect silently.
-      connectAndRegisterTools();
-    } else {
-      // First visit — wait for a user click before touching AudioContext.
-      if (micBtn) {
-        micBtn.textContent = '🎤';
-        micBtn.title = 'مریم سے بات کریں';
-        micBtn.onclick = () => {
+    // Auto-reconnect only if the agent navigated us here
+    const saved = loadSavedSession();
+    if (saved && saved.token && saved.wsUrl && saved.agentNavigated) {
+      setTimeout(async () => {
+        setStatus('مریم سے دوبارہ جڑ رہے ہیں...', true);
+        const micBtn = document.getElementById('maryam-mic-btn');
+        if (micBtn) {
+          micBtn.textContent = '⏳';
           micBtn.classList.add('connecting');
-          micBtn.onclick = null; // prevent double-click
-          connectAndRegisterTools();
-        };
-      }
+        }
+        try {
+          await connectAndRegisterTools();
+        } catch (err) {
+          console.error('[Maryam] Auto-reconnect failed:', err);
+        }
+      }, 800);
     }
   });
 })();

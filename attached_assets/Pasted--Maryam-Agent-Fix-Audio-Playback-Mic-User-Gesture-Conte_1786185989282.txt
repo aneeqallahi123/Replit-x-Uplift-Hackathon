@@ -1,0 +1,338 @@
+# Maryam Agent — Fix: Audio Playback + Mic User Gesture
+
+## Context
+
+Two issues are causing the voice agent to appear connected 
+but produce no audible output:
+
+1. Mic never enabled — connectAndRegisterTools() was called 
+   on DOMContentLoaded before any user click, so the browser 
+   blocked microphone access silently
+
+2. Audio never played — when Maryam responds, her voice arrives 
+   as a LiveKit remote audio track, but nothing in the current 
+   code attaches that track to an <audio> element or calls 
+   play() on it, so her response is received and silently 
+   discarded
+
+Both must be fixed. Do not change anything else.
+
+---
+
+## Fix 1 — Audio playback: attach remote tracks
+
+Inside connectAndRegisterTools(), after room.connect() succeeds,
+add a listener for incoming audio tracks:
+
+  // Listen for Maryam's voice coming back from LiveKit
+  room.on(LivekitClient.RoomEvent.TrackSubscribed, 
+    (track, publication, participant) => {
+      if (track.kind === LivekitClient.Track.Kind.Audio) {
+        console.log('[Maryam] Audio track received — attaching playback');
+        
+        const audioEl = track.attach();
+        audioEl.id = 'maryam-audio-output';
+        
+        // Must be in the DOM for some browsers to play
+        audioEl.style.display = 'none';
+        document.body.appendChild(audioEl);
+        
+        // Autoplay safety net — browsers may block play() 
+        // unless triggered by a user gesture.
+        // We attempt play() immediately; if it fails due to 
+        // autoplay policy, we retry on the next user click.
+        audioEl.play().catch((err) => {
+          console.warn('[Maryam] Autoplay blocked — will retry on next click:', err);
+          
+          // Retry on next user interaction anywhere on the page
+          function retryPlay() {
+            audioEl.play()
+              .then(() => {
+                console.log('[Maryam] Audio playback started after user gesture');
+                document.removeEventListener('click', retryPlay);
+              })
+              .catch((e) => {
+                console.warn('[Maryam] Retry also failed:', e);
+              });
+          }
+          document.addEventListener('click', retryPlay);
+        });
+      }
+    }
+  );
+
+  // Also handle tracks that were already subscribed before 
+  // the listener was added (can happen on session resume)
+  room.remoteParticipants.forEach((participant) => {
+    participant.trackPublications.forEach((publication) => {
+      if (publication.track && 
+          publication.track.kind === LivekitClient.Track.Kind.Audio) {
+        const audioEl = publication.track.attach();
+        audioEl.style.display = 'none';
+        document.body.appendChild(audioEl);
+        audioEl.play().catch(() => {
+          console.warn('[Maryam] Existing track autoplay blocked');
+        });
+      }
+    });
+  });
+
+  // Clean up audio elements when tracks are unsubscribed
+  room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+    if (track.kind === LivekitClient.Track.Kind.Audio) {
+      track.detach().forEach(el => el.remove());
+      console.log('[Maryam] Audio track detached and removed');
+    }
+  });
+
+---
+
+## Fix 2 — Mic: connect only on user click (not page load)
+
+Replace the current DOMContentLoaded listener entirely:
+
+  // OLD — connects on page load, browser blocks mic
+  document.addEventListener('DOMContentLoaded', () => {
+    connectAndRegisterTools().catch(err => 
+      console.error('[Maryam] Failed:', err)
+    );
+  });
+
+  // NEW — only injects UI on load, connects on click
+  let maryamRoom     = null;
+  let maryamConnected = false;
+
+  document.addEventListener('DOMContentLoaded', () => {
+    injectPointerStylesOnce();
+    injectPointerElements();
+    bindMicButton();
+
+    // Auto-reconnect only if a previous agent navigation 
+    // brought us here (agent set agentNavigated flag)
+    const saved = loadSavedSession();
+    if (saved && saved.token && saved.wsUrl && saved.agentNavigated) {
+      setTimeout(async () => {
+        setStatus('مریم سے دوبارہ جڑ رہے ہیں...', true);
+        const micBtn = document.getElementById('maryam-mic-btn');
+        if (micBtn) { 
+          micBtn.textContent = '⏳'; 
+          micBtn.classList.add('connecting'); 
+        }
+        try {
+          await connectAndRegisterTools();
+        } catch(err) {
+          console.error('[Maryam] Auto-reconnect failed:', err);
+        }
+      }, 800);
+    }
+  });
+
+  function bindMicButton() {
+    const micBtn = document.getElementById('maryam-mic-btn');
+    if (!micBtn) return;
+
+    micBtn.addEventListener('click', async () => {
+
+      // If already connected — toggle mute
+      if (maryamConnected && maryamRoom) {
+        const isOn = maryamRoom.localParticipant.isMicrophoneEnabled;
+        await maryamRoom.localParticipant.setMicrophoneEnabled(!isOn);
+        micBtn.textContent    = !isOn ? '🎤' : '🔇';
+        micBtn.style.background = !isOn ? '#167B38' : '#e53e3e';
+        setStatus(!isOn ? 'مائیک آن' : 'مائیک آف', true);
+        await delay(1500);
+        setStatus('', false);
+        return;
+      }
+
+      // First click — connect (this IS the user gesture)
+      micBtn.disabled = true;
+      micBtn.textContent = '⏳';
+      micBtn.classList.add('connecting');
+      setStatus('مریم سے جڑ رہے ہیں...', true);
+
+      try {
+        await connectAndRegisterTools();
+      } catch (err) {
+        console.error('[Maryam] Connection failed:', err);
+        micBtn.classList.remove('connecting');
+        micBtn.textContent    = '⚠️';
+        micBtn.style.background = '#e53e3e';
+        micBtn.disabled = false;
+        setStatus('کنکشن ناکام — دوبارہ کلک کریں', true);
+      }
+    });
+  }
+
+---
+
+## Fix 3 — connectAndRegisterTools: update to use maryamRoom
+
+Replace the existing connectAndRegisterTools() function with 
+this version that stores the room reference and updates button 
+state correctly:
+
+  async function connectAndRegisterTools() {
+    if (typeof LivekitClient === 'undefined') {
+      throw new Error('LivekitClient not loaded');
+    }
+
+    const micBtn = document.getElementById('maryam-mic-btn');
+    console.log('[Maryam] Getting session...');
+    
+    const session = await getOrResumeSession();
+    console.log('[Maryam] Session ready. wsUrl:', 
+      session.wsUrl ? 'ok' : 'MISSING');
+
+    const room = new LivekitClient.Room();
+    maryamRoom = room;
+
+    // ── Register RPC tools ──────────────────────────────────
+    room.localParticipant.registerRpcMethod(
+      'get_page_context',
+      async () => JSON.stringify(handleGetPageContext())
+    );
+    room.localParticipant.registerRpcMethod(
+      'navigate_to_page',
+      async (data) => {
+        const payload = JSON.parse(data.payload);
+        const args = payload.arguments?.raw_arguments ?? payload;
+        return JSON.stringify(handleNavigateToPage(args));
+      }
+    );
+    room.localParticipant.registerRpcMethod(
+      'point_to_element',
+      async (data) => {
+        const payload = JSON.parse(data.payload);
+        const args = payload.arguments?.raw_arguments ?? payload;
+        return JSON.stringify(await handlePointToElement(args));
+      }
+    );
+    room.localParticipant.registerRpcMethod(
+      'fill_field',
+      async (data) => {
+        const payload = JSON.parse(data.payload);
+        const args = payload.arguments?.raw_arguments ?? payload;
+        return JSON.stringify(await handleFillField(args));
+      }
+    );
+
+    // ── Connect to room ─────────────────────────────────────
+    await room.connect(session.wsUrl, session.token);
+    console.log('[Maryam] Room connected on:', getCurrentPageKey());
+
+    // ── Attach incoming audio (Fix 1 lives here) ────────────
+    room.on(LivekitClient.RoomEvent.TrackSubscribed,
+      (track, publication, participant) => {
+        if (track.kind === LivekitClient.Track.Kind.Audio) {
+          console.log('[Maryam] Audio track received — attaching');
+          const audioEl = track.attach();
+          audioEl.style.display = 'none';
+          document.body.appendChild(audioEl);
+          audioEl.play().catch(() => {
+            console.warn('[Maryam] Autoplay blocked — retry on click');
+            const retry = () => {
+              audioEl.play()
+                .then(() => document.removeEventListener('click', retry))
+                .catch(() => {});
+            };
+            document.addEventListener('click', retry);
+          });
+        }
+      }
+    );
+
+    room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+      if (track.kind === LivekitClient.Track.Kind.Audio) {
+        track.detach().forEach(el => el.remove());
+      }
+    });
+
+    // Handle already-subscribed tracks on session resume
+    room.remoteParticipants.forEach((participant) => {
+      participant.trackPublications.forEach((pub) => {
+        if (pub.track?.kind === LivekitClient.Track.Kind.Audio) {
+          const audioEl = pub.track.attach();
+          audioEl.style.display = 'none';
+          document.body.appendChild(audioEl);
+          audioEl.play().catch(() => {});
+        }
+      });
+    });
+
+    // ── Enable mic (user gesture context — safe here) ───────
+    await room.localParticipant.setMicrophoneEnabled(true);
+    console.log('[Maryam] Microphone enabled');
+
+    maryamConnected = true;
+
+    // Update button to connected state
+    if (micBtn) {
+      micBtn.classList.remove('connecting');
+      micBtn.textContent    = '🎤';
+      micBtn.style.background = '#167B38';
+      micBtn.disabled = false;
+      micBtn.title = 'مریم سن رہی ہے — کلک کریں مائیک بند کرنے کے لیے';
+    }
+
+    setStatus('مریم تیار ہے — بولیں', true);
+    await delay(2000);
+    setStatus('', false);
+  }
+
+---
+
+## Also update handleNavigateToPage to flag agent navigation
+
+  function handleNavigateToPage(payload) {
+    const urlMap = {
+      services: 'services.html',
+      apply:    'apply.html',
+      homepage: 'index.html'
+    };
+    const url = urlMap[payload.page];
+    if (!url) return { navigated: false, error: 'Unknown: ' + payload.page };
+
+    // Flag so next page auto-reconnects
+    const saved = loadSavedSession();
+    if (saved) saveSession({ ...saved, agentNavigated: true });
+
+    window.location.href = url;
+    return { navigated: true, target: url };
+  }
+
+---
+
+## How to verify it is working after this fix
+
+Open browser console and click the mic button. 
+You should see these lines in order:
+
+  [Maryam] Getting session...
+  [Maryam] Session ready. wsUrl: ok
+  [Maryam] Room connected on: homepage
+  [Maryam] Audio track received — attaching   ← THIS is the key one
+  [Maryam] Microphone enabled
+
+If you see "Audio track received" — audio playback is wired.
+If you do NOT see it — Maryam's agent has not joined the 
+LiveKit room yet on the Uplift AI side. That would be an 
+issue with the assistant configuration, not this code.
+
+Speak after the button turns green. 
+You should hear Maryam respond in Urdu within 1-3 seconds.
+
+---
+
+## Do not change anything else
+
+Only the three functions above change:
+- DOMContentLoaded listener + bindMicButton (Fix 2)
+- connectAndRegisterTools (Fix 3, includes Fix 1 inside it)  
+- handleNavigateToPage (agentNavigated flag)
+
+All tool handlers, pointer engine, styles, SITE_CONFIG, 
+session management — unchanged.
+
+Commit: "Fix audio playback and mic user-gesture connection"
+Push to GitHub.
