@@ -563,7 +563,25 @@
   // -------------------------------------------------------------------
   // Robust argument extraction — handles every known Uplift AI
   // payload shape so tool calls never fail silently.
+  // raw_arguments arrives as either an object or a JSON string depending
+  // on the shape; always hand callers an object.
+  function parseMaybeJson(value) {
+    if (typeof value !== 'string') return value;
+    try {
+      const parsed = JSON.parse(value);
+      return (parsed && typeof parsed === 'object') ? parsed : {};
+    } catch (e) {
+      console.warn('[Maryam] raw_arguments is not valid JSON:', value);
+      return {};
+    }
+  }
+
   function extractArgs(rawPayload) {
+    // No payload at all (get_page_context, guide_next_step) — not an error.
+    if (rawPayload === undefined || rawPayload === null || rawPayload === '') {
+      return {};
+    }
+
     let parsed;
     try {
       parsed = typeof rawPayload === 'string'
@@ -572,12 +590,13 @@
     } catch (e) {
       throw new Error('Payload not valid JSON: ' + rawPayload);
     }
+    if (!parsed || typeof parsed !== 'object') return {};
 
     // Shape 1 — documented Uplift AI format
     if (parsed.arguments && parsed.arguments.raw_arguments) {
-      return parsed.arguments.raw_arguments;
+      return parseMaybeJson(parsed.arguments.raw_arguments);
     }
-    // Shape 2 — flat arguments object
+    // Shape 2 — flat arguments object (no raw_arguments)
     if (parsed.arguments && typeof parsed.arguments === 'object') {
       return parsed.arguments;
     }
@@ -588,10 +607,12 @@
     }
     // Shape 4 — raw_arguments at top level
     if (parsed.raw_arguments) {
-      return parsed.raw_arguments;
+      return parseMaybeJson(parsed.raw_arguments);
     }
-    // Fallback
-    console.warn('[Maryam] Unknown payload shape:', parsed);
+    // Fallback — an empty object here is legitimate (no-arg tools).
+    if (Object.keys(parsed).length) {
+      console.warn('[Maryam] Unknown payload shape:', parsed);
+    }
     return parsed;
   }
 
@@ -658,7 +679,16 @@
   // element the citizen must click and WAITING for their click.
   // Maryam never clicks for the citizen.
   async function handleStartService(payload) {
-    const serviceKey = payload.service_key;
+    const serviceKey = payload && payload.service_key;
+    if (!serviceKey) {
+      return {
+        active: false,
+        error: 'service_key missing',
+        presentationInstructions:
+          'Mujhe pata nahi chala kaunsi service chahiye. User se poochhein ' +
+          'ke woh kaunsi service ke liye darkhwast dena chahte hain.',
+      };
+    }
     const mode = payload.mode === 'doorstep' ? 'doorstep' : 'online';
 
     console.log('[Maryam] start_service (guided):', serviceKey, mode);
@@ -673,7 +703,7 @@
     };
     saveFlow(flow);
 
-    return JSON.stringify(await executeCurrentFlowStep());
+    return executeCurrentFlowStep();
   }
 
   // Executes the flow's current step and advances state on the
@@ -1074,14 +1104,49 @@
     return executeCurrentFlowStep();
   }
 
+  async function handleScrollToElement(payload) {
+    const selector = payload && payload.element_id;
+    if (!selector) {
+      return {
+        scrolled: false,
+        error: 'element_id missing',
+        presentationInstructions:
+          'Mujhe pata nahi chala kahan scroll karna hai. User se poochhein ' +
+          'woh kya dhoond rahe hain.',
+      };
+    }
+    const el = document.querySelector(selector);
+    if (!el) {
+      return {
+        scrolled: false,
+        error: 'Element not found: ' + selector,
+        presentationInstructions:
+          'Woh cheez is page par nahi mili. User ko zubaani bataayein ke ' +
+          'woh page par kahan dekhein.',
+      };
+    }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await delay(400);
+    return { scrolled: true, element_id: selector };
+  }
+
   function handleNavigateToPage(payload) {
     const urlMap = {
       services: 'services.html',
       apply: 'apply.html',
       homepage: 'index.html',
     };
-    const url = urlMap[payload.page];
-    if (!url) return { navigated: false, error: 'Unknown page: ' + payload.page };
+    const page = payload && payload.page;
+    const url = urlMap[page];
+    if (!url) {
+      return {
+        navigated: false,
+        error: 'Unknown page: ' + page,
+        presentationInstructions:
+          'Woh page mujhe nahi mila. User se poochhein woh kahan jaana ' +
+          'chahte hain — homepage, services, ya application form.',
+      };
+    }
 
     // Flag so the next page auto-reconnects without another click
     const saved = loadSavedSession();
@@ -1114,7 +1179,20 @@
       }
       // Hard 20 s cap: this tool can never hold the conversation hostage,
       // even if the agent calls it directly outside the guided flow.
-      return await pointAndAwaitClick(selector, { timeoutMs: POINT_TIMEOUT_MS });
+      const outcome = await pointAndAwaitClick(selector, { timeoutMs: POINT_TIMEOUT_MS });
+      if (outcome.clicked) {
+        outcome.presentationInstructions =
+          'User ne click kar diya hai. Unhein shabashi dein aur agla qadam batayein.';
+      } else if (outcome.timed_out) {
+        outcome.presentationInstructions =
+          'User ne abhi tak click nahi kiya. Narmi se yaad dilayein ke green ' +
+          'dot wali jagah par tap karein.';
+      } else {
+        outcome.presentationInstructions =
+          'Screen par woh cheez nahi mili ya pointer hat gaya. User ko ' +
+          'zubaani bataayein ke kahan click karna hai.';
+      }
+      return outcome;
     } catch (err) {
       console.warn('[Maryam] point_to_element failed:', err.message);
       return {
@@ -1343,10 +1421,22 @@
   }
 
   async function handleFillField(payload) {
-    const fieldId = payload.field_name;
-    const value = payload.value;
-
+    // Destructured INSIDE the try: a malformed payload must produce a
+    // structured result the agent can speak, not a rejected RPC.
+    let fieldId;
     try {
+      fieldId = payload && payload.field_name;
+      const value = payload && payload.value;
+      if (!fieldId) {
+        return {
+          filled: false,
+          error: 'field_name missing',
+          presentationInstructions:
+            'Mujhe pata nahi chala kaunsi field bharni hai. User se ' +
+            'agli field ki value dobara poochhein.',
+        };
+      }
+
       const el = await waitForElement('#' + fieldId);
 
       // Move pointer to the field
@@ -1421,9 +1511,63 @@
       return { field_name: fieldId, value: value, filled: true };
     } catch (err) {
       console.warn('[Maryam] fill_field failed:', fieldId, err.message);
-      return { filled: false, error: err.message };
+      return {
+        filled: false,
+        field_name: fieldId,
+        error: err.message,
+        presentationInstructions:
+          'Yeh field bharne mein masla aaya. User se maazrat karein aur ' +
+          'unhein kahein ke woh khud yeh field bhar dein, phir aap aage barhein.',
+      };
     }
   }
+
+  // Single registry for every RPC method the remote agent can call.
+  // `recovery_ur` is what Maryam says if the handler throws outright.
+  const RPC_METHODS = [
+    {
+      name: 'get_page_context',
+      handler: function () { return handleGetPageContext(); },
+      recovery_ur: 'Page ki tafseelat nahi mil sakin. User se poochhein ' +
+                   'woh is waqt kaunse page par hain.',
+    },
+    {
+      name: 'start_service',
+      handler: handleStartService,
+      recovery_ur: 'Service shuru karne mein masla aaya. User se maazrat ' +
+                   'karein aur dobara koshish karein.',
+    },
+    {
+      name: 'guide_next_step',
+      handler: handleGuideNextStep,
+      recovery_ur: 'Agla qadam batane mein masla aaya. User ko kahein ke ' +
+                   'ek lamha rukein, phir dobara koshish karein.',
+    },
+    {
+      name: 'point_to_element',
+      handler: handlePointToElement,
+      recovery_ur: 'Screen par ishara nahi kar saki. User ko zubaani ' +
+                   'bataayein ke kahan click karna hai.',
+    },
+    {
+      name: 'fill_field',
+      handler: handleFillField,
+      recovery_ur: 'Field bharne mein masla aaya. User se kahein ke woh ' +
+                   'yeh field khud bhar dein.',
+    },
+    {
+      name: 'navigate_to_page',
+      handler: handleNavigateToPage,
+      recovery_ur: 'Page kholne mein masla aaya. User se poochhein woh ' +
+                   'kahan jaana chahte hain.',
+    },
+    {
+      name: 'scroll_to_element',
+      handler: handleScrollToElement,
+      recovery_ur: 'Page scroll nahi kar saki. User ko kahein ke woh khud ' +
+                   'thora neeche scroll karein.',
+    },
+  ];
 
   // -------------------------------------------------------------------
   // SECTION 7 — Session management
@@ -1688,87 +1832,29 @@
     maryamRoom = room;
 
     // ── Register RPC tools ──────────────────────────────────
-    room.localParticipant.registerRpcMethod(
-      'get_page_context',
-      async () => JSON.stringify(handleGetPageContext())
-    );
-    room.localParticipant.registerRpcMethod(
-      'navigate_to_page',
-      async (data) => {
-        const payload = JSON.parse(data.payload);
-        const args = payload.arguments ? payload.arguments.raw_arguments : payload;
-        return JSON.stringify(handleNavigateToPage(args));
-      }
-    );
-    room.localParticipant.registerRpcMethod(
-      'point_to_element',
-      async (data) => {
-        const payload = JSON.parse(data.payload);
-        const args = payload.arguments ? payload.arguments.raw_arguments : payload;
-        return JSON.stringify(await handlePointToElement(args));
-      }
-    );
-    room.localParticipant.registerRpcMethod(
-      'fill_field',
-      async (data) => {
-        const payload = JSON.parse(data.payload);
-        const args = payload.arguments ? payload.arguments.raw_arguments : payload;
-        return JSON.stringify(await handleFillField(args));
-      }
-    );
-    room.localParticipant.registerRpcMethod(
-      'scroll_to_element',
-      async (data) => {
-        const payload = JSON.parse(data.payload);
-        const args = payload.arguments ? payload.arguments.raw_arguments : payload;
-        const selector = args.element_id;
-        const el = document.querySelector(selector);
-        if (!el) {
-          return JSON.stringify({
-            scrolled: false,
-            error: 'Element not found: ' + selector,
-          });
-        }
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        await delay(700);
-        return JSON.stringify({ scrolled: true, element_id: selector });
-      }
-    );
-    room.localParticipant.registerRpcMethod(
-      'guide_next_step',
-      async () => {
-        console.log('[Maryam RPC] guide_next_step called');
+    //
+    // Every handler goes through the SAME wrapper: extractArgs (which
+    // knows all four Uplift payload shapes) plus a try/catch that always
+    // returns a structured result with something Maryam can say. A
+    // rejected RPC gives the agent a hard tool error and no recovery
+    // text, which reads exactly like the agent going silent.
+    RPC_METHODS.forEach(function (entry) {
+      room.localParticipant.registerRpcMethod(entry.name, async function (data) {
         try {
-          return JSON.stringify(await handleGuideNextStep());
+          const args = extractArgs(data && data.payload);
+          console.log('[Maryam RPC]', entry.name, args);
+          return JSON.stringify(await entry.handler(args));
         } catch (err) {
-          console.error('[Maryam RPC] guide_next_step error:', err);
+          console.error('[Maryam RPC]', entry.name, 'error:', err);
           return JSON.stringify({
             error: err.message,
-            presentationInstructions: 'Ek masla aaya. Dobara koshish karte hain.',
+            presentationInstructions: entry.recovery_ur ||
+              'Ek technical masla aaya. User se maazrat karein aur ' +
+              'poochhein ke woh dobara koshish karna chahte hain.',
           });
         }
-      }
-    );
-    room.localParticipant.registerRpcMethod(
-      'start_service',
-      async (data) => {
-        console.log('[Maryam RPC] start_service raw:', data.payload);
-        try {
-          const args = extractArgs(data.payload);
-          console.log('[Maryam RPC] start_service args:', args);
-          const result = await handleStartService(args);
-          console.log('[Maryam RPC] start_service done');
-          return result;
-        } catch (err) {
-          console.error('[Maryam RPC] start_service error:', err);
-          return JSON.stringify({
-            error: err.message,
-            presentationInstructions:
-              'Ek masla aaya. Dobara koshish karte hain.',
-          });
-        }
-      }
-    );
+      });
+    });
 
     // ── Connect to room ─────────────────────────────────────
     await room.connect(session.wsUrl, session.token);
