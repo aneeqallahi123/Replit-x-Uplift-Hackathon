@@ -126,6 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!card) return;
 
         const key = card.getAttribute('data-service-key');
+
         const wasActive = card.classList.contains('active-card');
         const existingPanel = row.parentElement.querySelector('.service-expanded-panel');
 

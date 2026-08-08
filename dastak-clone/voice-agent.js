@@ -2,9 +2,9 @@
  * voice-agent.js — Dastak Voice Agent, Track B
  *
  * Three-layer architecture:
- *   Layer 1 — Pointer Engine     : low-level pointer + DOM primitives
- *   Layer 2 — Navigation Controller : Dastak-specific step functions
- *   Layer 3 — Demo Orchestrator  : end-to-end sequence + DEMO_DATA
+ *   Layer 1 — Pointer Engine        : low-level pointer + DOM primitives
+ *   Layer 2 — Navigation Actions    : Dastak-specific named step functions
+ *   Layer 3 — Orchestrators         : page-specific flows (home / services)
  *
  * Track A integration points are marked with banner comments:
  *   ═══ TRACK A INTEGRATION POINT N ═══
@@ -16,9 +16,8 @@
 
 /* ════════════════════════════════════════════════════════════════
    SECTION 1 — Inject styles
-   No separate CSS file — all styles live here so the layer is
-   fully self-contained and can be dropped into any page with one
-   <script> tag.
+   No separate CSS file — fully self-contained; drop into any page
+   with one <script> tag.
    ════════════════════════════════════════════════════════════════ */
 (function injectStyles() {
   const style = document.createElement('style');
@@ -72,6 +71,39 @@
       align-items:    flex-end;
       gap:            10px;
     }
+
+    /* ── Consent banner ── */
+    #va-consent-banner {
+      background:    #fff;
+      border:        1.5px solid #167B38;
+      border-radius: 12px;
+      padding:       14px 16px;
+      max-width:     240px;
+      box-shadow:    0 4px 16px rgba(0,0,0,0.14);
+      text-align:    right;
+      direction:     rtl;
+      display:       none;
+    }
+    #va-consent-banner p {
+      margin:      0 0 10px;
+      font-size:   12px;
+      line-height: 1.6;
+      color:       #333;
+      font-family: 'Outfit', sans-serif;
+    }
+    #va-consent-confirm {
+      width:         100%;
+      background:    #167B38;
+      color:         #fff;
+      border:        none;
+      border-radius: 8px;
+      padding:       7px 0;
+      font-size:     13px;
+      cursor:        pointer;
+      font-family:   'Outfit', sans-serif;
+      transition:    background 0.2s;
+    }
+    #va-consent-confirm:hover { background: #125e2e; }
 
     /* ── Status bubble ── */
     #mic-status-bubble {
@@ -128,6 +160,11 @@
     return;
   }
   panel.innerHTML = `
+    <div id="va-consent-banner">
+      <p>یہ ایجنٹ ویب سائٹ پر آپ کی رہنمائی کرے گا۔
+         شروع کرنے کے لیے تصدیق کریں۔</p>
+      <button id="va-consent-confirm">ٹھیک ہے ✓</button>
+    </div>
     <div id="mic-status-bubble"></div>
     <button id="mic-btn" title="Voice Agent — Click to start demo">🎤</button>
   `;
@@ -135,39 +172,7 @@
 
 
 /* ════════════════════════════════════════════════════════════════
-   SECTION 3 — Core utility
-   ════════════════════════════════════════════════════════════════ */
-
-/** Returns a Promise that resolves after `ms` milliseconds. */
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
- * Shows or hides the Urdu status bubble.
- * @param {string}  text - Message to display (Urdu)
- * @param {boolean} show - true = show, false = hide
- */
-function setStatus(text, show = true) {
-  const bubble = document.getElementById('mic-status-bubble');
-  bubble.textContent = text;
-  bubble.style.display = show ? 'block' : 'none';
-}
-
-/**
- * Triggers the pulse animation on the pointer ring.
- * Removes and re-adds the class to restart the keyframe animation.
- */
-function triggerPulse() {
-  const pointer = document.getElementById('agent-pointer');
-  pointer.classList.remove('pulse');
-  void pointer.offsetWidth; // force reflow to restart animation
-  pointer.classList.add('pulse');
-}
-
-
-/* ════════════════════════════════════════════════════════════════
-   SECTION 4 — Field map constant
+   SECTION 3 — Field map constant
    Integration contract between Track A and Track B.
    Track A's NLU layer must return { field, value } where `field`
    is one of the keys below. Track B reads fieldConfig.id to
@@ -189,7 +194,7 @@ const FIELD_MAP = {
 
 
 /* ════════════════════════════════════════════════════════════════
-   SECTION 5 — Track A stub functions
+   SECTION 4 — Track A stub functions
    These three functions define the integration contract.
    Track A replaces ONLY the function bodies — never the signatures.
    ════════════════════════════════════════════════════════════════ */
@@ -246,6 +251,35 @@ async function speakConfirmation(urduText) {
    Only knows how to move a pointer and interact with DOM elements.
    ════════════════════════════════════════════════════════════════ */
 
+/** Returns a Promise that resolves after `ms` milliseconds. */
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * Shows or hides the Urdu status bubble.
+ * @param {string}  text - Message to display (Urdu)
+ * @param {boolean} show - true = show, false = hide
+ */
+function setStatus(text, show = true) {
+  const bubble = document.getElementById('mic-status-bubble');
+  if (!bubble) return;
+  bubble.textContent = text;
+  bubble.style.display = show ? 'block' : 'none';
+}
+
+/**
+ * Triggers the pulse animation on the pointer ring.
+ * Removes and re-adds the class to restart the keyframe animation.
+ */
+function triggerPulse() {
+  const pointer = document.getElementById('agent-pointer');
+  if (!pointer) return;
+  pointer.classList.remove('pulse');
+  void pointer.offsetWidth; // force reflow to restart animation
+  pointer.classList.add('pulse');
+}
+
 /**
  * Moves the pointer ring to center over a DOM element.
  * Always scrolls first and waits before reading final position —
@@ -253,21 +287,23 @@ async function speakConfirmation(urduText) {
  * @param {Element} el - Target element
  */
 async function movePointerTo(el) {
+  if (!el) { console.warn('[VoiceAgent] movePointerTo: element not found'); return; }
   const pointer = document.getElementById('agent-pointer');
+  if (!pointer) return;
 
-  // Step 1: Check if element is fully in viewport
+  // Step 1: scroll into view if not fully visible
   const rectBefore = el.getBoundingClientRect();
-  const needsScroll = rectBefore.top < 0 || rectBefore.bottom > window.innerHeight;
-
-  if (needsScroll) {
+  const fullyVisible = rectBefore.top >= 0 && rectBefore.bottom <= window.innerHeight
+                    && rectBefore.left >= 0 && rectBefore.right  <= window.innerWidth;
+  if (!fullyVisible) {
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     await delay(500); // wait for scroll to settle
   }
 
-  // Step 2: Get fresh position AFTER scroll
+  // Step 2: get fresh rect AFTER scroll
   const rect = el.getBoundingClientRect();
 
-  // Step 3: Center the 44px ring on the element (subtract half = 22px)
+  // Step 3: center the 44px ring over the element (subtract half ring = 22px)
   pointer.style.left = (rect.left + rect.width  / 2 - 22) + 'px';
   pointer.style.top  = (rect.top  + rect.height / 2 - 22) + 'px';
   pointer.classList.add('active');
@@ -276,42 +312,7 @@ async function movePointerTo(el) {
 }
 
 /**
- * Moves pointer to element, pulses, then clicks it.
- * @param {Element} el
- */
-async function clickElement(el) {
-  await movePointerTo(el);
-  triggerPulse();
-  await delay(300);
-  el.click();
-  await delay(200);
-}
-
-/**
- * Moves pointer to a form field and types a value character by character.
- * Dispatches input + change events so framework listeners stay in sync.
- * @param {Element} el    - Target input element
- * @param {string}  value - Full value to type
- */
-async function typeIntoField(el, value) {
-  await movePointerTo(el);
-  triggerPulse();
-  el.classList.add('field-highlight');
-  el.value = '';
-
-  for (const char of value) {
-    el.value += char;
-    el.dispatchEvent(new Event('input',  { bubbles: true }));
-    el.dispatchEvent(new Event('change', { bubbles: true }));
-    await delay(60);
-  }
-
-  await delay(300);
-  el.classList.remove('field-highlight');
-}
-
-/**
- * Moves pointer to element and holds it there for durationMs.
+ * Moves pointer to element and holds it for durationMs.
  * @param {Element} el
  * @param {number}  durationMs
  */
@@ -321,43 +322,124 @@ async function hoverElement(el, durationMs) {
 }
 
 /**
- * Hides the pointer ring and moves it off screen.
+ * Moves pointer to element, pulses, then fires a real click.
+ * @param {Element} el
+ */
+async function clickElement(el) {
+  await hoverElement(el, 400);
+  triggerPulse();
+  await delay(200);
+  el.click();
+  await delay(300);
+}
+
+/**
+ * Moves pointer to a form field and types a value character by character.
+ * Dispatches input + change + keyup so framework validators stay in sync.
+ * Fires blur after all characters so step-level validation triggers.
+ * @param {Element} el    - Target input element
+ * @param {string}  value - Full string to type
+ */
+async function typeIntoField(el, value) {
+  await movePointerTo(el);
+  triggerPulse();
+  el.classList.add('field-highlight');
+  el.value = '';
+
+  for (const char of value) {
+    el.value += char;
+    el.dispatchEvent(new Event('input',              { bubbles: true }));
+    el.dispatchEvent(new Event('change',             { bubbles: true }));
+    el.dispatchEvent(new KeyboardEvent('keyup',      { bubbles: true }));
+    await delay(60);
+  }
+
+  el.dispatchEvent(new Event('blur', { bubbles: true }));
+  await delay(300);
+  el.classList.remove('field-highlight');
+}
+
+/**
+ * Hides the pointer ring.
  */
 function hidePointer() {
   const pointer = document.getElementById('agent-pointer');
+  if (!pointer) return;
   pointer.classList.remove('active');
   pointer.style.left = '-100px';
 }
 
 
 /* ════════════════════════════════════════════════════════════════
-   LAYER 2 — Navigation Controller
+   LAYER 2 — Navigation Actions
    Dastak-specific step functions. Calls Layer 1 only —
    never manipulates DOM directly.
    ════════════════════════════════════════════════════════════════ */
 
 /**
- * Step 1: Hover the Renewal of Regular License card (pointer visible),
- * then open the offcanvas directly via the Bootstrap API.
- * This keeps the "agent is selecting this service" animation intact
- * while leaving normal card clicks unaffected (they expand the inline panel).
+ * STAGE 1, STEP A+B — Hover the "Apply Service" hero button then click it.
+ * The button scrolls the page to #govt_services.
  */
-async function navSelectRenewalService() {
+async function navClickApplyService() {
+  const btn = document.querySelector('a.btn_apply_service_hero');
+  setStatus('سروس کے لیے درخواست دینے کا بٹن...');
+  await hoverElement(btn, 800);
+  setStatus('سروسز دیکھ رہا ہوں...');
+  // Pulse for visual feedback without firing a real click — the button's href
+  // was updated to "services.html" so el.click() would navigate away immediately.
+  // Instead we programmatically scroll to the services section as the button intends.
+  triggerPulse();
+  await delay(300);
+  const target = document.getElementById('govt_services');
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  await delay(700); // wait for scroll to settle
+}
+
+/**
+ * STAGE 1, STEP C+D — Hover the DLIMS card then navigate to services page.
+ * Uses window.location so the URL carries ?autostart=true, which
+ * tells the services page to resume the flow automatically.
+ */
+async function navClickDlimsCard() {
+  const card = document.querySelector('.explore_slide_item[data-name="dlims"]');
+  setStatus('ڈی ایل آئی ایم ایس سروسز...');
+  await hoverElement(card, 800);
+  setStatus('ڈرائیونگ لائسنس سروسز...');
+  triggerPulse();
+  await delay(400);
+  // Navigate manually so we can append ?autostart=true
+  window.location.href = 'services.html?autostart=true';
+}
+
+/**
+ * STAGE 2, STEP A+B — Hover the "Renewal of Regular License" card (so the
+ * citizen sees which service is being selected), then open the offcanvas
+ * directly via Bootstrap API. A real card click would open the inline details
+ * panel (normal user behaviour), so the agent uses the API instead to keep
+ * both paths independent.
+ */
+async function navClickRenewalCard() {
   const card = document.querySelector('[data-service-key="renewal_driving_license"]');
-  setStatus('لائسنس رینیوول سروس ڈھونڈ رہا ہوں...');
+  setStatus('لائسنس رینیوول سروس...');
   await hoverElement(card, 800);
   setStatus('فارم کھل رہا ہے...');
   triggerPulse();
   await delay(300);
-  // Open offcanvas directly — does not trigger the card's normal inline-panel handler
+  // Open the website's own offcanvas directly — normal card clicks are unaffected
   bootstrap.Offcanvas.getOrCreateInstance(
     document.getElementById('appFormOffcanvas')
   ).show();
-  await delay(700); // wait for Bootstrap slide animation
 }
 
 /**
- * Step 2: Fill the Full Name field inside the open offcanvas.
+ * Wait for Bootstrap offcanvas slide-in animation to complete.
+ */
+async function navWaitForOffcanvas() {
+  await delay(700);
+}
+
+/**
+ * STAGE 3, STEP A+B — Fill the Full Name field.
  * @param {string} value
  */
 async function navFillFullName(value) {
@@ -368,7 +450,7 @@ async function navFillFullName(value) {
 }
 
 /**
- * Step 3: Fill the CNIC field inside the open offcanvas.
+ * STAGE 3, STEP C+D — Fill the CNIC field.
  * @param {string} value
  */
 async function navFillCnic(value) {
@@ -379,43 +461,65 @@ async function navFillCnic(value) {
 }
 
 /**
- * Hover the Next button for 400ms then click it, then wait for
- * the wizard transition to complete.
+ * STAGE 3, STEP E / STAGE 4, STEP A — Hover Next button 500ms then click.
+ * Used to advance the wizard from any step.
  * @param {string} [statusText] - Optional Urdu status override
  */
 async function navClickNext(statusText) {
   const btn = document.getElementById('btn-next');
   setStatus(statusText || 'اگلا مرحلہ...');
-  await hoverElement(btn, 400);
+  await hoverElement(btn, 500);
   await clickElement(btn);
   await delay(600); // wait for wizard step transition
 }
 
 /**
- * Hover the Terms checkbox then check it.
+ * STAGE 4 — Skip the Documents step (hover Next 400ms then click).
+ */
+async function navSkipDocuments() {
+  const btn = document.getElementById('btn-next');
+  setStatus('دستاویزات کا مرحلہ...');
+  await hoverElement(btn, 400);
+  await clickElement(btn);
+  await delay(600);
+}
+
+/**
+ * STAGE 5, STEP A+B — Hover the terms checkbox then check it.
  */
 async function navCheckTerms() {
   const checkbox = document.getElementById('wizardTerms');
   setStatus('شرائط قبول کر رہا ہوں...');
   await hoverElement(checkbox, 400);
-  await clickElement(checkbox);
+  triggerPulse();
+  await delay(200);
+  // Only click if currently unchecked — clicking an already-checked box toggles it OFF
+  if (!checkbox.checked) {
+    checkbox.click();
+  }
+  // Safety fallback: ensure checked state after the click
   checkbox.checked = true;
-  await delay(300);
+  checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+  await delay(400);
 }
 
 /**
- * Check terms then advance to submit.
+ * STAGE 5, STEP C — Hover submit button (same #btn-next on Step 3) then click.
+ * The website's own success modal fires.
  */
-async function navSubmitForm() {
-  await navCheckTerms();
-  await navClickNext('درخواست جمع ہو رہی ہے...');
+async function navSubmit() {
+  const btn = document.getElementById('btn-next');
+  setStatus('درخواست جمع ہو رہی ہے...');
+  await hoverElement(btn, 500);
+  await clickElement(btn);
+  await delay(500);
 }
 
 
 /* ════════════════════════════════════════════════════════════════
-   LAYER 3 — Demo Orchestrator
-   Defines the demo data and calls Layer 2 actions in sequence.
-   This is the only place where specific demo values live.
+   LAYER 3 — Orchestrators
+   Page-specific flows. Calls Layer 2 only.
+   DEMO_DATA is the only place hardcoded demo values live.
    Track A will replace DEMO_DATA with values extracted from speech.
    ════════════════════════════════════════════════════════════════ */
 
@@ -424,60 +528,143 @@ const DEMO_DATA = {
   cnic: '3520212345678',
 };
 
-async function runDemoFlow() {
-  await navSelectRenewalService();              // Step 1+2: hover card → offcanvas opens
-  await navFillFullName(DEMO_DATA.name);        // Step 3: fill Full Name
-  await navFillCnic(DEMO_DATA.cnic);            // Step 4: fill CNIC
-  await navClickNext('پہلا مرحلہ مکمل...');    // Step 5: Next → wizard Step 2
-  await delay(500);
-  await navClickNext('دستاویزات کا مرحلہ...'); // Step 6: Next → wizard Step 3
-  await delay(500);
-  await navSubmitForm();                         // Step 7: check terms + submit
-  await delay(500);
-  hidePointer();                                 // Step 8: hide pointer
+/**
+ * HOME PAGE FLOW (index.html) — Stage 1
+ * Clicks Apply Service → scrolls to services section → clicks DLIMS card
+ * → navigates to services.html?autostart=true
+ * The services page resumes automatically on load.
+ */
+async function runHomePageFlow() {
+  await navClickApplyService();   // hover Apply Service → click → scroll
+  await navClickDlimsCard();      // hover DLIMS → navigate (page changes here)
+  // Execution stops here; services.html picks up via ?autostart=true
+}
+
+/**
+ * SERVICES PAGE FLOW (services.html) — Stages 2-6
+ * Clicks Renewal card → offcanvas opens → fills form → submits
+ */
+async function runServicesPageFlow() {
+  // Stage 2 — select service
+  await navClickRenewalCard();            // hover card → click → offcanvas starts sliding
+  await navWaitForOffcanvas();            // wait for Bootstrap animation
+
+  // Stage 3 — fill personal info
+  await navFillFullName(DEMO_DATA.name);  // type Full Name
+  await navFillCnic(DEMO_DATA.cnic);      // type CNIC
+  await navClickNext('پہلا مرحلہ مکمل...'); // Next → Step 2
+
+  // Stage 4 — skip documents step
+  await navSkipDocuments();               // Next → Step 3
+
+  // Stage 5 — confirmation
+  await navCheckTerms();                  // check terms checkbox
+  await navSubmit();                      // click submit → success modal fires
+
+  // Stage 6 — completion
+  hidePointer();
   setStatus('فارم جمع ہو گیا ✅');
-  await delay(2000);
+  await delay(2500);
   setStatus('', false);
 }
 
 
 /* ════════════════════════════════════════════════════════════════
-   SECTION 8 — Mic button click handler
+   SECTION 5 — Consent banner + mic handler + page detection
    ════════════════════════════════════════════════════════════════ */
 let agentRunning = false;
 
-document.getElementById('mic-btn').addEventListener('click', async () => {
-  // If we are not on the services page, send the user there to run the demo
-  if (!document.querySelector('[data-service-key="renewal_driving_license"]')) {
-    window.location.href = 'services.html';
-    return;
+/**
+ * Shows the consent banner above the mic button.
+ * Returns a Promise that resolves when the user clicks confirm.
+ */
+function requestConsent() {
+  return new Promise(resolve => {
+    const banner = document.getElementById('va-consent-banner');
+    const btn    = document.getElementById('va-consent-confirm');
+    if (!banner || !btn) { resolve(); return; }
+    banner.style.display = 'block';
+    btn.addEventListener('click', function handler() {
+      btn.removeEventListener('click', handler);
+      banner.style.display = 'none';
+      sessionStorage.setItem('dastak_voice_consent', '1');
+      resolve();
+    }, { once: true });
+  });
+}
+
+/**
+ * Returns true if the user has already consented this session.
+ */
+function hasConsented() {
+  return sessionStorage.getItem('dastak_voice_consent') === '1';
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const path     = window.location.pathname;
+  const isHome   = path === '/' || path.includes('index') || path.endsWith('/');
+  const isSvc    = path.includes('services');
+  const autostart = window.location.search.includes('autostart=true');
+
+  const micBtn = document.getElementById('mic-btn');
+  if (!micBtn) return;
+
+  // ── Auto-start on services.html?autostart=true (cross-page continuation) ──
+  if (isSvc && autostart) {
+    // Consent was already given on the home page; carry it forward
+    sessionStorage.setItem('dastak_voice_consent', '1');
+    setTimeout(async () => {
+      if (agentRunning) return;
+      agentRunning = true;
+      micBtn.classList.add('listening');
+      await runServicesPageFlow();
+      micBtn.classList.remove('listening');
+      agentRunning = false;
+    }, 800);
+    return; // mic click not needed when autostart
   }
 
-  if (agentRunning) return;
-  agentRunning = true;
+  // ── Mic click handler ──
+  micBtn.addEventListener('click', async () => {
+    if (agentRunning) return;
 
-  const btn = document.getElementById('mic-btn');
-  btn.classList.add('listening');
+    // Show consent banner on first click
+    if (!hasConsented()) {
+      await requestConsent();
+    }
 
-  // ═══════════════════════════════════════════════════════════════
-  // TRACK A INTEGRATION POINT — Live voice input entry
-  // When Track A is ready, replace the direct runDemoFlow() call below
-  // with the following live loop:
-  //
-  //   const transcript = await captureAndTranscribe()
-  //   const extracted  = await extractField(transcript)
-  //   if (extracted) {
-  //     const fieldConfig = FIELD_MAP[extracted.field]
-  //     const el = document.getElementById(fieldConfig.id)
-  //     await typeIntoField(el, extracted.value)
-  //     await speakConfirmation(`${fieldConfig.urduLabel}: ${extracted.value}`)
-  //   }
-  //
-  // For now, skip real voice input entirely and run the hardcoded demo:
-  // ═══════════════════════════════════════════════════════════════
+    agentRunning = true;
+    micBtn.classList.add('listening');
 
-  btn.classList.remove('listening');
-  await runDemoFlow();
+    // ═══════════════════════════════════════════════════════════════
+    // TRACK A INTEGRATION POINT — Live voice input entry
+    // When Track A is ready, replace the direct flow calls below
+    // with the following live loop:
+    //
+    //   const transcript = await captureAndTranscribe()
+    //   const extracted  = await extractField(transcript)
+    //   if (extracted) {
+    //     const fieldConfig = FIELD_MAP[extracted.field]
+    //     const el = document.getElementById(fieldConfig.id)
+    //     await typeIntoField(el, extracted.value)
+    //     await speakConfirmation(`${fieldConfig.urduLabel}: ${extracted.value}`)
+    //   }
+    //
+    // For now, skip real voice input entirely and run the demo:
+    // ═══════════════════════════════════════════════════════════════
 
-  agentRunning = false;
+    if (isHome) {
+      await runHomePageFlow();
+      // Page navigates away — code below won't run
+    } else if (isSvc) {
+      micBtn.classList.remove('listening');
+      await runServicesPageFlow();
+    } else {
+      // Unknown page — go to services
+      window.location.href = 'services.html';
+    }
+
+    agentRunning = false;
+    micBtn.classList.remove('listening');
+  });
 });
