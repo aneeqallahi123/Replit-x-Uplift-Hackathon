@@ -1,11 +1,10 @@
 /**
  * voice-agent.js — Dastak Voice Agent, Track B
  *
- * This file is the entire Track B layer. It is fully self-contained:
- *  - Injects its own styles into <head>
- *  - Injects the mic panel HTML into #voice-agent-panel
- *  - Implements all utility functions and the demo flow
- *  - Leaves three clearly-marked stub functions for Track A to replace
+ * Three-layer architecture:
+ *   Layer 1 — Pointer Engine     : low-level pointer + DOM primitives
+ *   Layer 2 — Navigation Controller : Dastak-specific step functions
+ *   Layer 3 — Demo Orchestrator  : end-to-end sequence + DEMO_DATA
  *
  * Track A integration points are marked with banner comments:
  *   ═══ TRACK A INTEGRATION POINT N ═══
@@ -13,27 +12,6 @@
  * Do NOT modify the function signatures of the three stubs.
  * Track A replaces only the function bodies.
  */
-
-/* ════════════════════════════════════════════════════════════════
-   SECTION 4 — Field map constant
-   This is the integration contract between Track A and Track B.
-   Track A's NLU layer must return { field, value } where `field`
-   is one of the keys below. Track B reads fieldConfig.id to
-   locate the DOM element.
-   ════════════════════════════════════════════════════════════════ */
-const FIELD_MAP = {
-  name: { id: 'wizardFullName', label: 'Full Name',   urduLabel: 'نام' },
-  cnic: { id: 'wizardCnic',     label: 'CNIC Number', urduLabel: 'سی این آئی سی' },
-  // The following fields exist in the real Dastak renewal form.
-  // They live in later wizard steps not yet wired for voice input.
-  // Track A should extract these from speech — Track B will wire
-  // them up once the wizard steps are expanded:
-  // dob:              { label: 'Date of Birth',     urduLabel: 'تاریخ پیدائش' },
-  // license_number:   { label: 'License Number',    urduLabel: 'لائسنس نمبر' },
-  // license_type:     { label: 'License Type',      urduLabel: 'لائسنس قسم' },
-  // license_category: { label: 'License Category',  urduLabel: 'لائسنس درجہ' },
-  // expiry_date:      { label: 'Expiry Date',        urduLabel: 'میعاد ختم' },
-};
 
 
 /* ════════════════════════════════════════════════════════════════
@@ -157,7 +135,7 @@ const FIELD_MAP = {
 
 
 /* ════════════════════════════════════════════════════════════════
-   SECTION 3 — Core utility functions
+   SECTION 3 — Core utility
    ════════════════════════════════════════════════════════════════ */
 
 /** Returns a Promise that resolves after `ms` milliseconds. */
@@ -177,46 +155,6 @@ function setStatus(text, show = true) {
 }
 
 /**
- * Animates the pointer ring to center over a DOM element.
- * Accounts for scroll position so the ring lands on the correct spot
- * even inside a scrollable offcanvas.
- * @param {Element} el - Target element
- * @returns {Promise} resolves after the CSS transition completes (500ms)
- */
-function movePointerToElement(el) {
-  const pointer = document.getElementById('agent-pointer');
-  const rect    = el.getBoundingClientRect();
-
-  // Center the 44px ring on the element (subtract half = 22px)
-  pointer.style.left = (rect.left + rect.width  / 2 - 22) + 'px';
-  pointer.style.top  = (rect.top  + rect.height / 2 - 22) + 'px';
-  pointer.classList.add('active');
-
-  return delay(500); // wait for CSS transition
-}
-
-/**
- * Fills a form field character-by-character with a typewriter effect.
- * Dispatches 'input' events so any existing listeners stay in sync.
- * @param {string} fieldId - DOM id of the input
- * @param {string} value   - Full value to type in
- */
-async function fillField(fieldId, value) {
-  const el = document.getElementById(fieldId);
-  el.classList.add('field-highlight');
-  el.value = '';
-
-  for (const char of value) {
-    el.value += char;
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    await delay(60);
-  }
-
-  await delay(300);
-  el.classList.remove('field-highlight');
-}
-
-/**
  * Triggers the pulse animation on the pointer ring.
  * Removes and re-adds the class to restart the keyframe animation.
  */
@@ -226,6 +164,28 @@ function triggerPulse() {
   void pointer.offsetWidth; // force reflow to restart animation
   pointer.classList.add('pulse');
 }
+
+
+/* ════════════════════════════════════════════════════════════════
+   SECTION 4 — Field map constant
+   Integration contract between Track A and Track B.
+   Track A's NLU layer must return { field, value } where `field`
+   is one of the keys below. Track B reads fieldConfig.id to
+   locate the DOM element.
+   ════════════════════════════════════════════════════════════════ */
+const FIELD_MAP = {
+  name: { id: 'wizardFullName', label: 'Full Name',   urduLabel: 'نام' },
+  cnic: { id: 'wizardCnic',     label: 'CNIC Number', urduLabel: 'سی این آئی سی' },
+  // The following fields exist in the real Dastak renewal form.
+  // They live in later wizard steps not yet wired for voice input.
+  // Track A should extract these from speech — Track B will wire
+  // them up once the wizard steps are expanded:
+  // dob:              { label: 'Date of Birth',     urduLabel: 'تاریخ پیدائش' },
+  // license_number:   { label: 'License Number',    urduLabel: 'لائسنس نمبر' },
+  // license_type:     { label: 'License Type',      urduLabel: 'لائسنس قسم' },
+  // license_category: { label: 'License Category',  urduLabel: 'لائسنس درجہ' },
+  // expiry_date:      { label: 'Expiry Date',        urduLabel: 'میعاد ختم' },
+};
 
 
 /* ════════════════════════════════════════════════════════════════
@@ -245,13 +205,12 @@ function triggerPulse() {
 // ═══════════════════════════════════════════════════════════════
 async function captureAndTranscribe() {
   // STUB — Track A replaces this
-  // When real: records mic audio, sends to Uplift AI STT, returns Urdu transcript
   return null;
 }
 
 // ═══════════════════════════════════════════════════════════════
 // TRACK A INTEGRATION POINT 2 — Field Extraction (NLU)
-// Currently: Returns null — demo flow uses hardcoded DEMO_SEQUENCE
+// Currently: Returns null — demo flow uses hardcoded DEMO_DATA
 // Replace with:
 //   - Takes a transcript string
 //   - Calls Track A's LLM-based extraction logic
@@ -282,73 +241,193 @@ async function speakConfirmation(urduText) {
 
 
 /* ════════════════════════════════════════════════════════════════
-   SECTION 6 — Demo sequence
-   Hardcoded data that the demo flow types into the wizard.
-   Track A will replace this with live voice input — see Section 8.
+   LAYER 1 — Pointer Engine
+   Low-level primitives. Has no knowledge of Dastak or its flow.
+   Only knows how to move a pointer and interact with DOM elements.
    ════════════════════════════════════════════════════════════════ */
-const DEMO_SEQUENCE = [
-  {
-    field:        'name',
-    value:        'علی احمد',
-    statusFill:   'نام بھر رہا ہوں...',
-    confirmation: '✓ نام: علی احمد',
-  },
-  {
-    field:        'cnic',
-    value:        '3520212345678',
-    statusFill:   'شناختی کارڈ نمبر بھر رہا ہوں...',
-    confirmation: '✓ شناختی کارڈ: 3520212345678',
-  },
-];
+
+/**
+ * Moves the pointer ring to center over a DOM element.
+ * Always scrolls first and waits before reading final position —
+ * critical for elements inside offcanvases that animate in.
+ * @param {Element} el - Target element
+ */
+async function movePointerTo(el) {
+  const pointer = document.getElementById('agent-pointer');
+
+  // Step 1: Check if element is fully in viewport
+  const rectBefore = el.getBoundingClientRect();
+  const needsScroll = rectBefore.top < 0 || rectBefore.bottom > window.innerHeight;
+
+  if (needsScroll) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await delay(500); // wait for scroll to settle
+  }
+
+  // Step 2: Get fresh position AFTER scroll
+  const rect = el.getBoundingClientRect();
+
+  // Step 3: Center the 44px ring on the element (subtract half = 22px)
+  pointer.style.left = (rect.left + rect.width  / 2 - 22) + 'px';
+  pointer.style.top  = (rect.top  + rect.height / 2 - 22) + 'px';
+  pointer.classList.add('active');
+
+  await delay(500); // wait for CSS transition
+}
+
+/**
+ * Moves pointer to element, pulses, then clicks it.
+ * @param {Element} el
+ */
+async function clickElement(el) {
+  await movePointerTo(el);
+  triggerPulse();
+  await delay(300);
+  el.click();
+  await delay(200);
+}
+
+/**
+ * Moves pointer to a form field and types a value character by character.
+ * Dispatches input + change events so framework listeners stay in sync.
+ * @param {Element} el    - Target input element
+ * @param {string}  value - Full value to type
+ */
+async function typeIntoField(el, value) {
+  await movePointerTo(el);
+  triggerPulse();
+  el.classList.add('field-highlight');
+  el.value = '';
+
+  for (const char of value) {
+    el.value += char;
+    el.dispatchEvent(new Event('input',  { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    await delay(60);
+  }
+
+  await delay(300);
+  el.classList.remove('field-highlight');
+}
+
+/**
+ * Moves pointer to element and holds it there for durationMs.
+ * @param {Element} el
+ * @param {number}  durationMs
+ */
+async function hoverElement(el, durationMs) {
+  await movePointerTo(el);
+  await delay(durationMs);
+}
+
+/**
+ * Hides the pointer ring and moves it off screen.
+ */
+function hidePointer() {
+  const pointer = document.getElementById('agent-pointer');
+  pointer.classList.remove('active');
+  pointer.style.left = '-100px';
+}
 
 
 /* ════════════════════════════════════════════════════════════════
-   SECTION 7 — Main demo flow
-   Runs automatically when the mic button is clicked.
-   Drives the entire wizard without any keyboard input.
+   LAYER 2 — Navigation Controller
+   Dastak-specific step functions. Calls Layer 1 only —
+   never manipulates DOM directly.
    ════════════════════════════════════════════════════════════════ */
-async function runDemoFlow() {
-  const pointer = document.getElementById('agent-pointer');
 
-  // ── Step 1: Open the renewal offcanvas ──────────────────────
-  setStatus('لائسنس رینیوول سروس کھل رہی ہے...');
-  document.querySelector('[data-service-key="renewal_driving_license"]').click();
-  await delay(800);
+/**
+ * Step 1: Hover the Renewal of Regular License card, then click it.
+ * Waits 700ms after click for the Bootstrap offcanvas animation.
+ */
+async function navSelectRenewalService() {
+  const card = document.querySelector('[data-service-key="renewal_driving_license"]');
+  setStatus('لائسنس رینیوول سروس ڈھونڈ رہا ہوں...');
+  await hoverElement(card, 800);
+  setStatus('فارم کھل رہا ہے...');
+  await clickElement(card);
+  await delay(700); // wait for offcanvas slide animation
+}
 
-  // ── Step 2: Fill each field in sequence ─────────────────────
-  for (const step of DEMO_SEQUENCE) {
-    const fieldConfig = FIELD_MAP[step.field];
-    const el = document.getElementById(fieldConfig.id);
+/**
+ * Step 2: Fill the Full Name field inside the open offcanvas.
+ * @param {string} value
+ */
+async function navFillFullName(value) {
+  const el = document.getElementById('wizardFullName');
+  setStatus('نام بھر رہا ہوں...');
+  await typeIntoField(el, value);
+  await speakConfirmation('✓ نام: ' + value);
+}
 
-    setStatus(step.statusFill);
-    await movePointerToElement(el);
-    triggerPulse();
-    await delay(200);
-    await fillField(fieldConfig.id, step.value);
+/**
+ * Step 3: Fill the CNIC field inside the open offcanvas.
+ * @param {string} value
+ */
+async function navFillCnic(value) {
+  const el = document.getElementById('wizardCnic');
+  setStatus('شناختی کارڈ نمبر بھر رہا ہوں...');
+  await typeIntoField(el, value);
+  await speakConfirmation('✓ شناختی کارڈ: ' + value);
+}
 
-    // speakConfirmation is a stub — currently shows text + 1200ms wait.
-    // Track A will replace it with real Uplift AI TTS audio.
-    await speakConfirmation(step.confirmation);
-  }
+/**
+ * Hover the Next button for 400ms then click it, then wait for
+ * the wizard transition to complete.
+ * @param {string} [statusText] - Optional Urdu status override
+ */
+async function navClickNext(statusText) {
+  const btn = document.getElementById('btn-next');
+  setStatus(statusText || 'اگلا مرحلہ...');
+  await hoverElement(btn, 400);
+  await clickElement(btn);
+  await delay(600); // wait for wizard step transition
+}
 
-  // ── Step 3: Advance wizard steps ────────────────────────────
-  setStatus('اگلا مرحلہ...');
-  pointer.classList.remove('active');
-  await delay(400);
-
-  document.getElementById('btn-next').click();   // Step 1 → Step 2
-  await delay(600);
-
-  document.getElementById('btn-next').click();   // Step 2 → Step 3
-  await delay(600);
-
-  document.getElementById('wizardTerms').checked = true;
+/**
+ * Hover the Terms checkbox then check it.
+ */
+async function navCheckTerms() {
+  const checkbox = document.getElementById('wizardTerms');
+  setStatus('شرائط قبول کر رہا ہوں...');
+  await hoverElement(checkbox, 400);
+  await clickElement(checkbox);
+  checkbox.checked = true;
   await delay(300);
+}
 
-  document.getElementById('btn-next').click();   // Submit → success modal
+/**
+ * Check terms then advance to submit.
+ */
+async function navSubmitForm() {
+  await navCheckTerms();
+  await navClickNext('درخواست جمع ہو رہی ہے...');
+}
 
-  // ── Step 4: Finish ───────────────────────────────────────────
+
+/* ════════════════════════════════════════════════════════════════
+   LAYER 3 — Demo Orchestrator
+   Defines the demo data and calls Layer 2 actions in sequence.
+   This is the only place where specific demo values live.
+   Track A will replace DEMO_DATA with values extracted from speech.
+   ════════════════════════════════════════════════════════════════ */
+
+const DEMO_DATA = {
+  name: 'علی احمد',
+  cnic: '3520212345678',
+};
+
+async function runDemoFlow() {
+  await navSelectRenewalService();              // Step 1+2: hover card → offcanvas opens
+  await navFillFullName(DEMO_DATA.name);        // Step 3: fill Full Name
+  await navFillCnic(DEMO_DATA.cnic);            // Step 4: fill CNIC
+  await navClickNext('پہلا مرحلہ مکمل...');    // Step 5: Next → wizard Step 2
   await delay(500);
+  await navClickNext('دستاویزات کا مرحلہ...'); // Step 6: Next → wizard Step 3
+  await delay(500);
+  await navSubmitForm();                         // Step 7: check terms + submit
+  await delay(500);
+  hidePointer();                                 // Step 8: hide pointer
   setStatus('فارم جمع ہو گیا ✅');
   await delay(2000);
   setStatus('', false);
@@ -383,9 +462,7 @@ document.getElementById('mic-btn').addEventListener('click', async () => {
   //   if (extracted) {
   //     const fieldConfig = FIELD_MAP[extracted.field]
   //     const el = document.getElementById(fieldConfig.id)
-  //     await movePointerToElement(el)
-  //     triggerPulse()
-  //     await fillField(fieldConfig.id, extracted.value)
+  //     await typeIntoField(el, extracted.value)
   //     await speakConfirmation(`${fieldConfig.urduLabel}: ${extracted.value}`)
   //   }
   //
