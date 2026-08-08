@@ -1788,6 +1788,10 @@
     }
   }
 
+  // Shown via setStatus whenever autoplay is blocked, so the citizen is
+  // never left with unexplained silence.
+  const AUDIO_BLOCKED_MSG = 'مریم کی آواز سننے کے لیے اسکرین پر ٹیپ کریں';
+
   function attachAudioTrack(track) {
     const audioEl = track.attach();
     audioEl.id = 'maryam-audio-output';
@@ -1802,6 +1806,10 @@
       if (maryamAudioPlaying) return;
       maryamAudioPlaying = true;
       clearAudioNudge();
+      // Clear the "tap to hear" prompt, but only if it is still the thing
+      // on screen — never stomp a live status message.
+      var statusEl = document.getElementById('maryam-status');
+      if (statusEl && statusEl.textContent === AUDIO_BLOCKED_MSG) setStatus('', false);
       // Remove all retry listeners
       retryHandlers.forEach(function (h) {
         document.removeEventListener(h.evt, h.fn, true);
@@ -1820,12 +1828,18 @@
 
     audioEl.play().then(onPlaySuccess).catch(function (err) {
       console.warn('[Maryam] Autoplay blocked — registering multi-gesture retry:', err.name);
-      // Retry on any user gesture — click, touch, or keypress
+      // Chrome requires a user gesture on THIS document — the gesture from
+      // the previous page does not carry over, so after every guided
+      // navigation the citizen would otherwise miss Maryam's opening line.
+      // Retry on any user gesture — click, touch, or keypress.
       ['click', 'touchstart', 'keydown'].forEach(function (evtName) {
         var handler = function () { retryPlay(); };
         retryHandlers.push({ evt: evtName, fn: handler });
         document.addEventListener(evtName, handler, { capture: true });
       });
+      // Say so immediately — silence with no explanation is
+      // indistinguishable from the agent having died.
+      setStatus(AUDIO_BLOCKED_MSG, true);
       // Show a visible "tap to hear" nudge after 3 seconds if still blocked
       setTimeout(function () {
         if (!maryamAudioPlaying) showAudioNudge(retryPlay);
@@ -2098,9 +2112,16 @@
     injectPointerElements();
     bindMicButton();
 
-    // Auto-reconnect only if the agent navigated us here
+    // Auto-reconnect whenever this tab has ever had a session.
+    //
+    // Gating on agentNavigated meant that any ordinary link click — the
+    // nav bar, another service card, browser back — left the citizen on a
+    // page with no reconnect and no visible indication. To them Maryam
+    // simply died. agentNavigated is still read (in
+    // connectAndRegisterTools) to label the page-context push, but it is
+    // no longer what decides whether we reconnect.
     const saved = loadSavedSession();
-    if (saved && saved.token && saved.wsUrl && saved.agentNavigated) {
+    if (saved) {
       setTimeout(async () => {
         setStatus('مریم سے دوبارہ جڑ رہے ہیں...', true);
         const micBtn = document.getElementById('maryam-mic-btn');
