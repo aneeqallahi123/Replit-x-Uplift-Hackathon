@@ -1885,6 +1885,27 @@
     if (el) el.remove();
   }
 
+  // Resolves true as soon as a remote participant (the Uplift agent
+  // worker) is in the room, or false if none joins within timeoutMs.
+  function waitForRemoteParticipant(room, timeoutMs) {
+    if (room.remoteParticipants.size > 0) return Promise.resolve(true);
+    return new Promise((resolve) => {
+      let timer = null;
+      function done(result) {
+        if (timer) clearTimeout(timer);
+        try {
+          room.off(LivekitClient.RoomEvent.ParticipantConnected, onJoin);
+        } catch (e) { /* older client without .off — harmless */ }
+        resolve(result);
+      }
+      function onJoin() { done(true); }
+      room.on(LivekitClient.RoomEvent.ParticipantConnected, onJoin);
+      timer = setTimeout(function () {
+        done(room.remoteParticipants.size > 0);
+      }, timeoutMs || 5000);
+    });
+  }
+
   async function connectAndRegisterTools() {
     if (typeof LivekitClient === 'undefined') {
       throw new Error('LivekitClient not loaded');
@@ -2046,11 +2067,27 @@
     // navigation so it resumes the flow instead of guessing.
     // (arrivedViaAgentNav was captured before the fresh session replaced
     // the stored one, which consumed the flag.)
-    // Small delay so the remote agent participant is fully joined.
-    await delay(1500);
-    await pushPageContext(
-      arrivedViaAgentNav ? 'arrived after guided navigation' : 'session connected'
-    );
+    //
+    // A fixed delay was a gamble: if the remote agent joined even slightly
+    // later, the [PAGE UPDATE — ACTION REQUIRED] message vanished with no
+    // retry and the flow never resumed on the new page. Wait for the
+    // participant instead.
+    const reason = arrivedViaAgentNav
+      ? 'arrived after guided navigation' : 'session connected';
+    const agentPresent = await waitForRemoteParticipant(room, 5000);
+    console.log('[Maryam] Remote participants before page-context push:',
+      room.remoteParticipants.size,
+      agentPresent ? '(agent joined)' : '(TIMED OUT — pushing anyway)');
+
+    await pushPageContext(reason);
+
+    // If nobody was there when the push fired, it went nowhere. Retry once.
+    if (room.remoteParticipants.size === 0) {
+      await delay(2000);
+      console.warn('[Maryam] No remote participant at push time — retrying. ' +
+        'Remote participants now:', room.remoteParticipants.size);
+      await pushPageContext(reason + ' (retry)');
+    }
 
     await delay(500);
     setStatus('', false);
