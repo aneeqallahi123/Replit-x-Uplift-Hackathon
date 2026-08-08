@@ -1,0 +1,426 @@
+# Dastak Voice Agent — Real Flow Fix (Complete Rewrite)
+
+## Critical problem with the current implementation
+
+The agent is triggering #appFormOffcanvas — a Bootstrap offcanvas 
+sidebar — when the user clicks the "Renewal of Regular License" card.
+
+THIS IS WRONG.
+
+That offcanvas is NOT what happens in the real website flow. Look at 
+what actually happens when a real user clicks that card:
+
+1. The card gets highlighted green (selected state)
+2. A "Choose How You Want to Apply" section APPEARS ON THE SAME PAGE
+   below the service cards — showing Self Service vs Doorstep Service
+   options, a Required Documents table, Fee information, and an 
+   Apply button
+3. The user selects "Self Service"  
+4. The user clicks "Apply"
+5. The browser NAVIGATES to apply.html — a completely separate page
+6. apply.html contains the actual form with fields:
+   CNIC, License No., License Issuance Date, Renewal Duration,
+   Is old License in Possession, a math captcha answer, and Submit
+
+The agent must follow THIS flow. Not the offcanvas. The offcanvas 
+(#appFormOffcanvas) should never be opened by the agent at all.
+
+---
+
+## The real navigation map (what to build)
+
+### PAGE 1 — index.html
+
+STEP 1: Pointer moves to hero "Apply Service" button
+  Target: a.btn_apply_service_hero
+  Hover 800ms, click it
+  Page scrolls to #govt_services section
+  Wait 600ms for scroll
+  Status: "سروسز تلاش کر رہا ہوں..."
+
+STEP 2: Pointer moves to DLIMS card
+  Target: .explore_slide_item[data-name="dlims"] .explore_cat_card
+  Hover 800ms
+  Status: "ڈرائیونگ لائسنس سروسز..."
+
+STEP 3: Click DLIMS card
+  Update the DLIMS card href from "#" to "services.html?autostart=true"
+  This is a required one-line fix in index.html
+  Click the card → browser navigates to services.html?autostart=true
+  Wait for navigation
+
+---
+
+### PAGE 2 — services.html
+
+On page load, check if URL contains ?autostart=true
+If yes, auto-start after 800ms without waiting for mic click
+
+STEP 4: Pointer moves to "Renewal of Regular License" card
+  Target: div[data-service-key="renewal_driving_license"]
+  Hover 1000ms — this is the key moment where citizen sees 
+  which service is being selected
+  Status: "لائسنس رینیوول سروس منتخب کر رہا ہوں..."
+
+STEP 5: Click "Renewal of Regular License" card
+  el.click() — triggers the website's own card selection behavior
+  The card should highlight green and the "Choose How You Want 
+  to Apply" section should appear below
+  Wait 700ms for the section to render
+  Status: "سروس منتخب ہو گئی..."
+
+STEP 6: Scroll down to "Choose How You Want to Apply" section
+  After the card is clicked and the apply section appears,
+  scroll it into view:
+    const applySection = document.querySelector(
+      '.service-detail-panel, .apply-mode-section, 
+       [class*="apply"], [class*="service-detail"]'
+    )
+    OR find it by looking for an element containing 
+    the text "Choose How You Want to Apply"
+    OR find it by looking for the Self Service radio/card
+  
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  Wait 600ms
+  Status: "درخواست کا طریقہ منتخب کر رہا ہوں..."
+
+STEP 7: Pointer moves to "Self Service" option and clicks it
+  Target: the Self Service card/radio button
+  Find it by: 
+    querySelector('[data-mode="self"]') 
+    OR querySelector('input[value="self"]')
+    OR the card/div containing the text "Self Service"
+  Hover 600ms
+  Click it — it should highlight green (selected)
+  Wait 400ms
+  Status: "سیلف سروس منتخب کر رہا ہوں..."
+
+STEP 8: Scroll down to the Apply button
+  Target: a button or link containing text "Apply" 
+  that appears in the service detail section
+  Find it by:
+    Array.from(document.querySelectorAll('button, a'))
+      .find(el => el.textContent.trim() === 'Apply')
+    OR querySelector('.btn-apply, #btn-apply, [data-action="apply"]')
+  Scroll into view, wait 500ms
+  Status: "درخواست شروع کر رہا ہوں..."
+
+STEP 9: Pointer moves to Apply button, hovers 600ms, clicks it
+  The website should navigate to apply.html
+  (or apply.html?service=renewal_driving_license)
+  Wait for navigation
+
+---
+
+### PAGE 3 — apply.html
+
+Load voice-agent.js on this page too.
+Add injection lines to apply.html just before </body>:
+  <div id="agent-pointer"></div>
+  <div id="voice-agent-panel"></div>
+  <script src="voice-agent.js"></script>
+
+On page load, check if the agent flow should continue.
+Use sessionStorage to carry state across pages:
+  On services.html before navigating away:
+    sessionStorage.setItem('agent_active', 'true')
+    sessionStorage.setItem('agent_stage', 'apply_form')
+  On apply.html on DOMContentLoaded:
+    if (sessionStorage.getItem('agent_active') === 'true' 
+        && sessionStorage.getItem('agent_stage') === 'apply_form') {
+      sessionStorage.removeItem('agent_stage')
+      setTimeout(() => runApplyFormFlow(), 900)
+    }
+
+The 900ms delay lets apply.html fully render before the agent 
+tries to interact with it.
+
+STEP 10: Pointer moves to CNIC field
+  Target: find the CNIC input on apply.html
+  Look for: input[placeholder*="CNIC"] 
+    OR input[name*="cnic"] 
+    OR label containing "CNIC" then its associated input
+  Hover, then fill character by character
+  Value: "3520212345678"
+  Events to fire on each character:
+    input, change, keyup (all with bubbles: true)
+  After fill: blur event, then speakConfirmation("✓ CNIC: 3520212345678")
+  Status: "شناختی کارڈ نمبر بھر رہا ہوں..."
+
+STEP 11: Pointer moves to License No. field
+  Target: input[placeholder*="License"] 
+    OR input[name*="license"]
+  Fill value: "LHR-2019-00123"
+  After fill: speakConfirmation("✓ لائسنس نمبر: LHR-2019-00123")
+  Status: "لائسنس نمبر بھر رہا ہوں..."
+
+STEP 12: Pointer moves to License Issuance Date field
+  Target: input[placeholder*="Date"] 
+    OR input[name*="date"] OR input[type="date"]
+  Fill value: "2019-03-15"
+  After fill: speakConfirmation("✓ تاریخ: 2019-03-15")
+  Status: "لائسنس کی تاریخ بھر رہا ہوں..."
+
+STEP 13: Pointer moves to Renewal Duration dropdown/select
+  Target: select containing "1 Year" option
+    OR input/select with name containing "duration" OR "renewal"
+  If it is a <select>:
+    el.value = the value corresponding to "For 1 Year"
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+  If it is a custom dropdown, click it and select the first option
+  After: speakConfirmation("✓ مدت: ایک سال")
+  Status: "رینیوول کی مدت منتخب کر رہا ہوں..."
+
+STEP 14: Pointer moves to "Is old License in Possession" dropdown
+  Target: select or input related to possession
+  Set to "Yes, in my possession" or equivalent first option
+  After: speakConfirmation("✓ پرانا لائسنس موجود ہے")
+  Status: "پرانا لائسنس..."
+
+STEP 15: Handle the math captcha
+  Target: the captcha answer input
+    querySelector('input[placeholder*="Answer"], .math-captcha-input')
+  Read the math question from the page:
+    const questionEl = document.querySelector(
+      '.math-question, strong[class*="math"]'
+    )
+    const questionText = questionEl?.textContent 
+      e.g. "5 + 9 = ?"
+  Solve it in JavaScript:
+    const parts = questionText.replace('= ?','').trim().split('+')
+    const answer = parseInt(parts[0]) + parseInt(parts[1])
+  Fill the answer field with the computed answer
+  Status: "سوال حل کر رہا ہوں..."
+
+STEP 16: Pointer moves to Submit button, hovers 600ms, clicks it
+  Target: button[type="submit"], 
+    OR querySelector('button.btn-success, button') 
+       with text "Submit"
+  Status: "درخواست جمع کر رہا ہوں..."
+
+STEP 17: Success state
+  After submit click, the page should show a success state
+  Hide pointer
+  Status: "درخواست جمع ہو گئی ✅"
+  Wait 2500ms, hide status bubble
+  Clear sessionStorage: 
+    sessionStorage.removeItem('agent_active')
+
+---
+
+## Page detection logic — single voice-agent.js handles all 3 pages
+
+const path = window.location.pathname + window.location.search;
+
+if (path.includes('index') || path === '/' || path.endsWith('/')) {
+  // HOME PAGE
+  document.getElementById('mic-btn')
+    .addEventListener('click', handleMicClick);
+  function handleMicClick() {
+    if (!hasConsented()) { showConsentBanner(); return; }
+    if (agentRunning) return;
+    agentRunning = true;
+    runHomePageFlow().finally(() => agentRunning = false);
+  }
+}
+
+if (path.includes('services')) {
+  // SERVICES PAGE
+  if (path.includes('autostart=true')) {
+    window.addEventListener('DOMContentLoaded', () => {
+      setTimeout(() => {
+        if (!agentRunning) {
+          agentRunning = true;
+          runServicesPageFlow().finally(() => agentRunning = false);
+        }
+      }, 800);
+    });
+  } else {
+    document.getElementById('mic-btn')
+      .addEventListener('click', handleMicClick);
+  }
+}
+
+if (path.includes('apply')) {
+  // APPLY PAGE
+  window.addEventListener('DOMContentLoaded', () => {
+    if (sessionStorage.getItem('agent_active') === 'true'
+        && sessionStorage.getItem('agent_stage') === 'apply_form') {
+      sessionStorage.removeItem('agent_stage');
+      setTimeout(() => {
+        agentRunning = true;
+        runApplyFormFlow().finally(() => agentRunning = false);
+      }, 900);
+    } else {
+      // Manual trigger via mic button on apply page
+      document.getElementById('mic-btn')
+        ?.addEventListener('click', handleMicClick);
+    }
+  });
+}
+
+---
+
+## State handoff between pages (sessionStorage)
+
+Before navigating from services.html to apply.html, set:
+  sessionStorage.setItem('agent_active', 'true')
+  sessionStorage.setItem('agent_stage', 'apply_form')
+
+This tells apply.html to auto-continue the flow.
+The mic button on apply.html also works as a manual trigger 
+in case the user lands there directly.
+
+Before navigating from index.html to services.html, the URL 
+param ?autostart=true carries the signal instead of sessionStorage,
+because the navigation is a link click not a JS redirect.
+
+---
+
+## Finding elements on apply.html robustly
+
+You do not have the exact IDs for apply.html form fields. 
+Use resilient selectors that try multiple strategies:
+
+  function findField(strategies) {
+    for (const selector of strategies) {
+      const el = document.querySelector(selector);
+      if (el) return el;
+    }
+    console.warn('Could not find field with strategies:', strategies);
+    return null;
+  }
+
+  // CNIC field
+  const cnicField = findField([
+    'input[name*="cnic" i]',
+    'input[placeholder*="CNIC" i]',
+    'input[id*="cnic" i]',
+    '#cnic'
+  ]);
+
+  // License number field
+  const licenseField = findField([
+    'input[name*="license" i]',
+    'input[placeholder*="License No" i]',
+    'input[id*="license" i]'
+  ]);
+
+  // Date field
+  const dateField = findField([
+    'input[type="date"]',
+    'input[name*="date" i]',
+    'input[placeholder*="Date" i]',
+    'input[id*="date" i]'
+  ]);
+
+  // Captcha answer
+  const captchaField = findField([
+    'input[placeholder*="Answer" i]',
+    '.math-captcha-input',
+    'input[name*="captcha" i]'
+  ]);
+
+  // Submit button
+  const submitBtn = findField([
+    'button[type="submit"]',
+    'input[type="submit"]',
+    'button.btn-success',
+    'button.btn-primary'
+  ]);
+
+If any field returns null, log a warning and skip that step 
+rather than crashing the whole flow.
+
+---
+
+## Three-layer architecture — keep exactly as before
+
+Layer 1 — Pointer Engine (movePointerTo, clickElement, 
+  typeIntoField, hoverElement, hidePointer, triggerPulse, 
+  delay, setStatus) — no changes needed
+
+Layer 2 — Navigation Actions
+  Replace all previous nav functions with these new ones:
+  
+  async navClickApplyServiceHero()
+  async navScrollToDlims()  
+  async navClickDlimsCard()        // navigates to services.html?autostart=true
+  async navClickRenewalCard()      // highlights card, reveals apply section
+  async navWaitForApplySection()   // waits for section to appear
+  async navSelectSelfService()     // clicks Self Service option
+  async navClickApplyButton()      // navigates to apply.html
+  async navFillCnic(value)
+  async navFillLicenseNumber(value)
+  async navFillIssuanceDate(value)
+  async navSelectRenewalDuration()
+  async navSelectPossession()
+  async navSolveCaptcha()
+  async navClickSubmit()
+
+Layer 3 — Orchestrators
+  runHomePageFlow()      — calls Stage 1 nav actions
+  runServicesPageFlow()  — calls Stage 2 nav actions  
+  runApplyFormFlow()     — calls Stage 3 nav actions
+
+---
+
+## Track A stubs — unchanged, keep exactly as before
+
+  async function captureAndTranscribe() { return null; }
+  async function extractField(transcript) { return null; }
+  async function speakConfirmation(urduText) {
+    setStatus(urduText);
+    await delay(1200);
+  }
+
+---
+
+## Files to modify
+
+1. voice-agent.js — complete rewrite using real flow above
+2. index.html — change DLIMS card href from "#" to 
+   "services.html?autostart=true"
+3. services.html — add agent injection before </body> 
+   (keep existing, just add if not already there)
+4. apply.html — add agent injection before </body>:
+   <div id="agent-pointer"></div>
+   <div id="voice-agent-panel"></div>
+   <script src="voice-agent.js"></script>
+
+DO NOT modify services.js, apply.js, script.js, or any CSS.
+
+---
+
+## Definition of done
+
+1. index.html loads — green mic button bottom-right ✓
+2. Click mic → consent banner → confirm ✓
+3. Pointer moves to "Apply Service" hero button → clicks ✓
+4. Page scrolls to services section ✓
+5. Pointer moves to DLIMS card → clicks ✓
+6. Browser navigates to services.html ✓
+7. Pointer reappears automatically on services.html ✓
+8. Pointer moves to "Renewal of Regular License" card ✓
+9. Pointer hovers 1 second → clicks ✓
+10. Card highlights GREEN (website's own behavior) ✓
+11. "Choose How You Want to Apply" section appears below ✓
+12. Pointer scrolls to and clicks "Self Service" ✓
+    Self Service card highlights green ✓
+13. Pointer moves to "Apply" button → clicks ✓
+14. Browser navigates to apply.html ✓
+15. Pointer reappears on apply.html automatically ✓
+16. Pointer moves to CNIC field → fills "3520212345678" ✓
+17. Pointer moves to License No. field → fills value ✓
+18. Pointer moves to License Issuance Date → fills value ✓
+19. Pointer moves to Renewal Duration → selects option ✓
+20. Pointer moves to possession field → selects option ✓
+21. Agent reads captcha question, solves it, fills answer ✓
+22. Pointer moves to Submit → clicks ✓
+23. Success state appears ✓
+24. Pointer hides, Urdu status confirms, fades out ✓
+
+At every single step, what the user sees is the REAL website 
+responding to REAL interactions. The agent adds only the 
+pointer circle and the small bottom-right status panel.
+Nothing else on screen is created by the agent.
