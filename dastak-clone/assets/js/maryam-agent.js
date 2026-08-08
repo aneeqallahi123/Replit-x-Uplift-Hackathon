@@ -30,72 +30,205 @@
   // SECTION 2 — Site config (embedded, no network call needed)
   // -------------------------------------------------------------------
   const SITE_CONFIG = {
+
     homepage: {
       page: 'homepage',
-      notes:
-        "The DLIMS service category card here is not wired to navigate anywhere (href='#'). Do not point_to_element on it — call navigate_to_page('services') instead.",
+      notes: 'DLIMS card href is #. Do not point_to_element ' +
+             'on it. Call start_service() or navigate_to_page' +
+             '("services") instead.',
     },
+
     services: {
       page: 'services',
+      instruction: 'Use start_service() for any service. ' +
+                   'Pass service_key and mode. ' +
+                   'Only use point_to_element for fine control.',
       elements: [
         {
-          action: 'select_service',
-          element_id: '[data-service-key="renewal_driving_license"]',
-          label: 'Renewal of Regular License',
-          interaction: 'point_to_element',
-          result: 'Expands a panel with two apply-mode options below the service row',
+          service_key:  'renewal_driving_license',
+          element_id:   '[data-service-key="renewal_driving_license"]',
+          label_en:     'Renewal of Regular License',
+          label_ur:     'ریگولر لائسنس رینیوول',
+          triggers_ur:  [
+            'license renew',
+            'renew karna',
+            'license renewal',
+            'driving license renew',
+            'لائسنس رینیو',
+          ],
+          use_tool:     'start_service',
         },
         {
-          action: 'select_apply_mode_self_service',
-          element_id: '.apply_online',
-          label: 'Self Service',
-          interaction: 'point_to_element',
-          note: "class name says apply_online but this IS the Self Service option",
+          service_key:  'learner_driving_license',
+          element_id:   '[data-service-key="learner_driving_license"]',
+          label_en:     'Learner Driving License',
+          label_ur:     'لرنر ڈرائیونگ لائسنس',
+          triggers_ur:  [
+            'learner license',
+            'learning license',
+            'pehli baar license',
+            'لرنر لائسنس',
+          ],
+          use_tool:     'start_service',
         },
         {
-          action: 'select_apply_mode_doorstep',
-          element_id: '.apply_self',
-          label: 'Doorstep Service',
-          interaction: 'point_to_element',
-          note: "class name says apply_self but this IS the Doorstep Service option",
+          service_key:  'duplicate_driving_license',
+          element_id:   '[data-service-key="duplicate_driving_license"]',
+          label_en:     'Duplicate Driving License',
+          label_ur:     'ڈپلیکیٹ ڈرائیونگ لائسنس',
+          triggers_ur:  [
+            'duplicate license',
+            'license gum gaya',
+            'license kho gaya',
+            'ڈپلیکیٹ لائسنس',
+          ],
+          use_tool:     'start_service',
         },
         {
-          action: 'proceed_to_application',
-          element_id: '.btn-apply-service',
-          label: 'Apply',
-          interaction: 'point_to_element',
-          requires: 'an apply mode must be selected first',
-          result: 'Navigates to apply.html',
+          service_key:  'renewal_learner_driving_license',
+          element_id:   '[data-service-key="renewal_learner_driving_license"]',
+          label_en:     'Renewal of Learners License',
+          label_ur:     'لرنر لائسنس رینیوول',
+          use_tool:     'start_service',
+        },
+        {
+          service_key:  'international_driving_license_duplicate',
+          element_id:   '[data-service-key="international_driving_license_duplicate"]',
+          label_en:     'Duplicate International License',
+          label_ur:     'انٹرنیشنل لائسنس ڈپلیکیٹ',
+          use_tool:     'start_service',
+        },
+        {
+          service_key:  'international_driving_license',
+          element_id:   '[data-service-key="international_driving_license"]',
+          label_en:     'Renewal International License',
+          label_ur:     'انٹرنیشنل لائسنس رینیوول',
+          use_tool:     'start_service',
+        },
+        {
+          action:       'select_apply_mode_self_service',
+          element_id:   '.apply_online',
+          label_en:     'Self Service',
+          label_ur:     'خود سروس',
+          note:         'CSS class is apply_online but this IS Self Service',
+        },
+        {
+          action:       'select_apply_mode_doorstep',
+          element_id:   '.apply_self',
+          label_en:     'Doorstep Service',
+          label_ur:     'گھر پہنچ سروس',
+          note:         'CSS class is apply_self but this IS Doorstep Service',
+        },
+        {
+          action:       'proceed_to_application',
+          element_id:   '.btn-apply-service',
+          label_en:     'Apply',
+          label_ur:     'درخواست دیں',
+          requires:     'mode must be selected first',
         },
       ],
     },
+
     apply: {
-      page: 'apply',
-      service: 'renewal_driving_license',
+      page:     'apply',
+      service:  'renewal_driving_license',
       formType: 'renewal-license',
+      instruction: 'Use fill_field() for each field. ' +
+                   'Always confirm value verbally before filling. ' +
+                   'After all 5 fields: point to captcha, ' +
+                   'then point to submit button.',
       fields: [
-        { order: 1, field_id: 'fCnic',         label: 'CNIC',
-          type: 'text',   validation: 'exactly 13 digits, no dashes' },
-        { order: 2, field_id: 'fLicenseNo',    label: 'License Number',
-          type: 'text',   validation: 'non-empty' },
-        { order: 3, field_id: 'fIssuanceDate', label: 'License Issuance Date',
-          type: 'date',   validation: 'real past date' },
-        { order: 4, field_id: 'fDuration',     label: 'Renewal Duration',
-          type: 'select',
-          options: ['For 1 Year', 'For 2 Years', 'For 3 Years', 'For 4 Years', 'For 5 Years'] },
-        { order: 5, field_id: 'fPossession',   label: 'Is Old License in Possession',
-          type: 'select',
-          options: ['Yes, in my possession', "No, it's lost"] },
+        {
+          order:      1,
+          field_id:   'fCnic',
+          label_en:   'CNIC',
+          label_ur:   'شناختی کارڈ نمبر',
+          ask_ur:     'Aapka CNIC number kya hai?',
+          confirm_ur: 'Kya aapka CNIC {value} hai?',
+          type:       'text',
+          validation: 'exactly 13 digits, no dashes or spaces',
+        },
+        {
+          order:      2,
+          field_id:   'fLicenseNo',
+          label_en:   'License Number',
+          label_ur:   'لائسنس نمبر',
+          ask_ur:     'Aapka driving license number kya hai?',
+          confirm_ur: 'License number {value} hai?',
+          type:       'text',
+          validation: 'non-empty string',
+        },
+        {
+          order:      3,
+          field_id:   'fIssuanceDate',
+          label_en:   'License Issuance Date',
+          label_ur:   'لائسنس جاری ہونے کی تاریخ',
+          ask_ur:     'License kab issue hua tha? ' +
+                      'Saal, mahina aur din batayein.',
+          confirm_ur: 'Issuance date {value} hai?',
+          type:       'date',
+          format:     'YYYY-MM-DD',
+          validation: 'real past date',
+        },
+        {
+          order:      4,
+          field_id:   'fDuration',
+          label_en:   'Renewal Duration',
+          label_ur:   'رینیوول کی مدت',
+          ask_ur:     'Kitne saal ke liye renew karna hai?',
+          type:       'select',
+          options:    [
+            'For 1 Year',
+            'For 2 Years',
+            'For 3 Years',
+            'For 4 Years',
+            'For 5 Years',
+          ],
+          options_ur: [
+            'ek saal / 1 year = For 1 Year',
+            'do saal / 2 years = For 2 Years',
+            'teen saal / 3 years = For 3 Years',
+            'chaar saal / 4 years = For 4 Years',
+            'paanch saal / 5 years = For 5 Years',
+          ],
+        },
+        {
+          order:      5,
+          field_id:   'fPossession',
+          label_en:   'Is Old License in Possession',
+          label_ur:   'کیا پرانا لائسنس موجود ہے',
+          ask_ur:     'Kya aapka purana license aapke paas hai?',
+          type:       'select',
+          options:    [
+            'Yes, in my possession',
+            "No, it's lost",
+          ],
+          options_ur: [
+            'haan / yes = Yes, in my possession',
+            "nahi / no = No, it's lost",
+          ],
+        },
       ],
       postFieldSteps: [
-        { step: 'captcha',
-          element_id: '.math-captcha-wrapper',
-          description: 'Math captcha — user solves directly on screen.' },
-        { step: 'submit',
-          element_id: '#btnSubmitApplication',
-          description: 'Final submit button.' },
+        {
+          step:           'captcha',
+          element_id:     '.math-captcha-wrapper',
+          label_en:       'Math Captcha',
+          label_ur:       'ریاضی کا سوال',
+          instruction_ur: 'Ek chota sa math sawaal hai. ' +
+                          'Main pointer se dikhaunga, ' +
+                          'aap khud jawab likhein.',
+        },
+        {
+          step:           'submit',
+          element_id:     '#btnSubmitApplication',
+          label_en:       'Submit Application',
+          label_ur:       'درخواست جمع کریں',
+          instruction_ur: 'Submit karne se pehle confirm karein.',
+        },
       ],
     },
+
   };
 
   // -------------------------------------------------------------------
@@ -279,9 +412,155 @@
   // -------------------------------------------------------------------
   // SECTION 6 — Tool handler implementations
   // -------------------------------------------------------------------
+  // Robust argument extraction — handles every known Uplift AI
+  // payload shape so tool calls never fail silently.
+  function extractArgs(rawPayload) {
+    let parsed;
+    try {
+      parsed = typeof rawPayload === 'string'
+        ? JSON.parse(rawPayload)
+        : rawPayload;
+    } catch (e) {
+      throw new Error('Payload not valid JSON: ' + rawPayload);
+    }
+
+    // Shape 1 — documented Uplift AI format
+    if (parsed.arguments && parsed.arguments.raw_arguments) {
+      return parsed.arguments.raw_arguments;
+    }
+    // Shape 2 — flat arguments object
+    if (parsed.arguments && typeof parsed.arguments === 'object') {
+      return parsed.arguments;
+    }
+    // Shape 3 — payload is args directly
+    if (parsed.element_id || parsed.field_name ||
+        parsed.page || parsed.service_key) {
+      return parsed;
+    }
+    // Shape 4 — raw_arguments at top level
+    if (parsed.raw_arguments) {
+      return parsed.raw_arguments;
+    }
+    // Fallback
+    console.warn('[Maryam] Unknown payload shape:', parsed);
+    return parsed;
+  }
+
+  // Small transient badge showing which tool Maryam invoked
+  function showToolBadge(text) {
+    setStatus(text, true);
+    setTimeout(() => setStatus('', false), 2500);
+  }
+
   function handleGetPageContext() {
     const pageKey = getCurrentPageKey();
     return SITE_CONFIG[pageKey] || { page: pageKey, notes: 'No config.' };
+  }
+
+  // High-level orchestrator: navigates an entire service flow in one
+  // call (card click → mode selection → Apply) instead of chaining
+  // five separate tool calls.
+  async function handleStartService(payload) {
+    const serviceKey = payload.service_key;
+    const mode = payload.mode || 'self_service';
+
+    console.log('[Maryam] start_service called:', serviceKey, mode);
+    showToolBadge('🚀 ' + serviceKey + ' / ' + mode);
+
+    const currentPage = getCurrentPageKey();
+
+    // ── If on homepage, navigate to services first ──────────
+    if (currentPage === 'homepage') {
+      setStatus('سروسز کی طرف جا رہے ہیں...', true);
+      const saved = loadSavedSession();
+      if (saved) saveSession({ ...saved, agentNavigated: true });
+      window.location.href = 'services.html';
+      return JSON.stringify({
+        navigating: true,
+        to: 'services.html',
+        presentationInstructions:
+          'Services page par ja raha hoon. Wahan pohanchne ke baad aage guide karoonga.',
+      });
+    }
+
+    // ── If on services page, run full selection flow ─────────
+    if (currentPage === 'services') {
+      const selector = '[data-service-key="' + serviceKey + '"]';
+      setStatus('سروس منتخب کر رہا ہوں...', true);
+
+      try {
+        // Step 1: Click the service card
+        const card = await waitForElement(selector);
+        await movePointerTo(card);
+        triggerPulse();
+        await delay(600);
+        card.click();
+        await delay(900);
+
+        // Step 2: Select delivery mode
+        const modeSelector = mode === 'doorstep'
+          ? '.apply_self'
+          : '.apply_online';
+
+        const modeEl = await waitForElement(modeSelector, 5000);
+        setStatus(
+          mode === 'doorstep'
+            ? 'گھر پہنچ سروس منتخب کر رہے ہیں...'
+            : 'سیلف سروس منتخب کر رہے ہیں...',
+          true
+        );
+        await movePointerTo(modeEl);
+        triggerPulse();
+        await delay(400);
+        modeEl.click();
+        await delay(500);
+
+        // Step 3: Click Apply button
+        const applyBtn = await waitForElement('.btn-apply-service', 5000);
+        setStatus('درخواست شروع کر رہے ہیں...', true);
+        await movePointerTo(applyBtn);
+        triggerPulse();
+        await delay(500);
+
+        // Save state so apply.html knows to auto-reconnect
+        const saved = loadSavedSession();
+        if (saved) saveSession({
+          ...saved,
+          agentNavigated: true,
+          serviceKey: serviceKey,
+          mode: mode,
+        });
+
+        applyBtn.click();
+
+        return JSON.stringify({
+          success: true,
+          service: serviceKey,
+          mode: mode,
+          presentationInstructions:
+            'Service select ho gayi. Application form khul raha hai. ' +
+            'Ab aapka CNIC number poochhta hoon.',
+        });
+      } catch (err) {
+        console.error('[Maryam] start_service failed:', err.message);
+        return JSON.stringify({
+          success: false,
+          error: err.message,
+          presentationInstructions:
+            'Service select karne mein masla aaya. ' +
+            'Kya aap dobara koshish karna chahenge?',
+        });
+      }
+    }
+
+    // ── Already on apply page ────────────────────────────────
+    return JSON.stringify({
+      success: false,
+      already_on_apply: true,
+      presentationInstructions:
+        'Aap pehle se application form par hain. ' +
+        'Kaunsa field bharna hai?',
+    });
   }
 
   function handleNavigateToPage(payload) {
@@ -326,7 +605,9 @@
       const labelMap = {};
       const pageConfig = SITE_CONFIG[getCurrentPageKey()];
       if (pageConfig && pageConfig.elements) {
-        pageConfig.elements.forEach((e) => { labelMap[e.element_id] = e.label; });
+        pageConfig.elements.forEach((e) => {
+          labelMap[e.element_id] = e.label_ur || e.label_en || e.label;
+        });
       }
       const label = labelMap[selector] || selector;
       setStatus('یہاں کلک کریں: ' + label);
@@ -583,6 +864,26 @@
         const payload = JSON.parse(data.payload);
         const args = payload.arguments ? payload.arguments.raw_arguments : payload;
         return JSON.stringify(await handleFillField(args));
+      }
+    );
+    room.localParticipant.registerRpcMethod(
+      'start_service',
+      async (data) => {
+        console.log('[Maryam RPC] start_service raw:', data.payload);
+        try {
+          const args = extractArgs(data.payload);
+          console.log('[Maryam RPC] start_service args:', args);
+          const result = await handleStartService(args);
+          console.log('[Maryam RPC] start_service done');
+          return result;
+        } catch (err) {
+          console.error('[Maryam RPC] start_service error:', err);
+          return JSON.stringify({
+            error: err.message,
+            presentationInstructions:
+              'Ek masla aaya. Dobara koshish karte hain.',
+          });
+        }
       }
     );
 

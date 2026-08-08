@@ -1,0 +1,457 @@
+# Maryam Agent — Intelligent Bilingual Navigation (Browser Side Only)
+
+## What this prompt does
+
+The Maryam assistant system prompt is being handled separately 
+on the Uplift AI backend. This prompt covers only the changes 
+to maryam-agent.js that make the browser-side navigation 
+intelligent and bilingual.
+
+Three things are added:
+1. A high-level start_service() tool so Maryam can navigate 
+   an entire service flow with one call instead of chaining 
+   five separate tool calls
+2. An updated SITE_CONFIG with bilingual labels so 
+   get_page_context() returns richer context to Maryam
+3. An extractArgs() fix that handles every known Uplift AI 
+   payload shape so tool calls never fail silently
+
+Do not touch server.js, index.html, services.html, apply.html, 
+or any other file. Only maryam-agent.js changes.
+
+---
+
+## Change 1 — Add handleStartService() function
+
+Add this function to maryam-agent.js, alongside the existing 
+handleGetPageContext, handleNavigateToPage, handlePointToElement, 
+handleFillField functions:
+
+  async function handleStartService(payload) {
+    const serviceKey = payload.service_key;
+    const mode       = payload.mode || 'self_service';
+
+    console.log('[Maryam] start_service called:', serviceKey, mode);
+    showToolBadge('🚀 ' + serviceKey + ' / ' + mode);
+
+    const currentPage = getCurrentPageKey();
+
+    // ── If on homepage, navigate to services first ──────────
+    if (currentPage === 'homepage') {
+      setStatus('سروسز کی طرف جا رہے ہیں...', true);
+      const saved = loadSavedSession();
+      if (saved) saveSession({ ...saved, agentNavigated: true });
+      window.location.href = 'services.html';
+      return JSON.stringify({
+        navigating: true,
+        to: 'services.html',
+        presentationInstructions:
+          'Services page par ja raha hoon. Wahan pohanchne ke baad aage guide karoonga.'
+      });
+    }
+
+    // ── If on services page, run full selection flow ─────────
+    if (currentPage === 'services') {
+      const selector = '[data-service-key="' + serviceKey + '"]';
+      setStatus('سروس منتخب کر رہا ہوں...', true);
+
+      try {
+        // Step 1: Click the service card
+        const card = await waitForElement(selector);
+        await movePointerTo(card);
+        triggerPulse();
+        await delay(600);
+        card.click();
+        await delay(900);
+
+        // Step 2: Select delivery mode
+        const modeSelector = mode === 'doorstep'
+          ? '.apply_self'
+          : '.apply_online';
+
+        const modeEl = await waitForElement(modeSelector, 5000);
+        setStatus(
+          mode === 'doorstep'
+            ? 'گھر پہنچ سروس منتخب کر رہے ہیں...'
+            : 'سیلف سروس منتخب کر رہے ہیں...',
+          true
+        );
+        await movePointerTo(modeEl);
+        triggerPulse();
+        await delay(400);
+        modeEl.click();
+        await delay(500);
+
+        // Step 3: Click Apply button
+        const applyBtn = await waitForElement(
+          '.btn-apply-service', 5000
+        );
+        setStatus('درخواست شروع کر رہے ہیں...', true);
+        await movePointerTo(applyBtn);
+        triggerPulse();
+        await delay(500);
+
+        // Save state so apply.html knows to auto-reconnect
+        const saved = loadSavedSession();
+        if (saved) saveSession({
+          ...saved,
+          agentNavigated: true,
+          serviceKey:     serviceKey,
+          mode:           mode,
+        });
+
+        applyBtn.click();
+
+        return JSON.stringify({
+          success: true,
+          service: serviceKey,
+          mode:    mode,
+          presentationInstructions:
+            'Service select ho gayi. Application form khul raha hai. ' +
+            'Ab aapka CNIC number poochhta hoon.'
+        });
+
+      } catch (err) {
+        console.error('[Maryam] start_service failed:', err.message);
+        return JSON.stringify({
+          success: false,
+          error:   err.message,
+          presentationInstructions:
+            'Service select karne mein masla aaya. ' +
+            'Kya aap dobara koshish karna chahenge?'
+        });
+      }
+    }
+
+    // ── Already on apply page ────────────────────────────────
+    return JSON.stringify({
+      success: false,
+      already_on_apply: true,
+      presentationInstructions:
+        'Aap pehle se application form par hain. ' +
+        'Kaunsa field bharna hai?'
+    });
+  }
+
+---
+
+## Change 2 — Register start_service as an RPC method
+
+Inside connectAndRegisterTools(), after the existing four 
+registerRpcMethod calls, add this fifth one:
+
+  room.localParticipant.registerRpcMethod(
+    'start_service',
+    async (data) => {
+      console.log('[Maryam RPC] start_service raw:', data.payload);
+      try {
+        const args = extractArgs(data.payload);
+        console.log('[Maryam RPC] start_service args:', args);
+        const result = await handleStartService(args);
+        console.log('[Maryam RPC] start_service done');
+        return result;
+      } catch (err) {
+        console.error('[Maryam RPC] start_service error:', err);
+        return JSON.stringify({
+          error: err.message,
+          presentationInstructions:
+            'Ek masla aaya. Dobara koshish karte hain.'
+        });
+      }
+    }
+  );
+
+---
+
+## Change 3 — Update SITE_CONFIG with bilingual labels
+
+Replace the existing SITE_CONFIG object entirely with this 
+version. The structure is identical — only labels are 
+enriched and use_tool hints are added so get_page_context() 
+gives Maryam better reasoning context:
+
+  const SITE_CONFIG = {
+
+    homepage: {
+      page: 'homepage',
+      notes: 'DLIMS card href is #. Do not point_to_element ' +
+             'on it. Call start_service() or navigate_to_page' +
+             '("services") instead.',
+    },
+
+    services: {
+      page: 'services',
+      instruction: 'Use start_service() for any service. ' +
+                   'Pass service_key and mode. ' +
+                   'Only use point_to_element for fine control.',
+      elements: [
+        {
+          service_key:  'renewal_driving_license',
+          element_id:   '[data-service-key="renewal_driving_license"]',
+          label_en:     'Renewal of Regular License',
+          label_ur:     'ریگولر لائسنس رینیوول',
+          triggers_ur:  [
+            'license renew',
+            'renew karna',
+            'license renewal',
+            'driving license renew',
+            'لائسنس رینیو',
+          ],
+          use_tool:     'start_service',
+        },
+        {
+          service_key:  'learner_driving_license',
+          element_id:   '[data-service-key="learner_driving_license"]',
+          label_en:     'Learner Driving License',
+          label_ur:     'لرنر ڈرائیونگ لائسنس',
+          triggers_ur:  [
+            'learner license',
+            'learning license',
+            'pehli baar license',
+            'لرنر لائسنس',
+          ],
+          use_tool:     'start_service',
+        },
+        {
+          service_key:  'duplicate_driving_license',
+          element_id:   '[data-service-key="duplicate_driving_license"]',
+          label_en:     'Duplicate Driving License',
+          label_ur:     'ڈپلیکیٹ ڈرائیونگ لائسنس',
+          triggers_ur:  [
+            'duplicate license',
+            'license gum gaya',
+            'license kho gaya',
+            'ڈپلیکیٹ لائسنس',
+          ],
+          use_tool:     'start_service',
+        },
+        {
+          service_key:  'renewal_learner_driving_license',
+          element_id:   '[data-service-key="renewal_learner_driving_license"]',
+          label_en:     'Renewal of Learners License',
+          label_ur:     'لرنر لائسنس رینیوول',
+          use_tool:     'start_service',
+        },
+        {
+          service_key:  'international_driving_license_duplicate',
+          element_id:   '[data-service-key="international_driving_license_duplicate"]',
+          label_en:     'Duplicate International License',
+          label_ur:     'انٹرنیشنل لائسنس ڈپلیکیٹ',
+          use_tool:     'start_service',
+        },
+        {
+          service_key:  'international_driving_license',
+          element_id:   '[data-service-key="international_driving_license"]',
+          label_en:     'Renewal International License',
+          label_ur:     'انٹرنیشنل لائسنس رینیوول',
+          use_tool:     'start_service',
+        },
+        {
+          action:       'select_apply_mode_self_service',
+          element_id:   '.apply_online',
+          label_en:     'Self Service',
+          label_ur:     'خود سروس',
+          note:         'CSS class is apply_online but this IS Self Service',
+        },
+        {
+          action:       'select_apply_mode_doorstep',
+          element_id:   '.apply_self',
+          label_en:     'Doorstep Service',
+          label_ur:     'گھر پہنچ سروس',
+          note:         'CSS class is apply_self but this IS Doorstep Service',
+        },
+        {
+          action:       'proceed_to_application',
+          element_id:   '.btn-apply-service',
+          label_en:     'Apply',
+          label_ur:     'درخواست دیں',
+          requires:     'mode must be selected first',
+        },
+      ],
+    },
+
+    apply: {
+      page:     'apply',
+      service:  'renewal_driving_license',
+      formType: 'renewal-license',
+      instruction: 'Use fill_field() for each field. ' +
+                   'Always confirm value verbally before filling. ' +
+                   'After all 5 fields: point to captcha, ' +
+                   'then point to submit button.',
+      fields: [
+        {
+          order:      1,
+          field_id:   'fCnic',
+          label_en:   'CNIC',
+          label_ur:   'شناختی کارڈ نمبر',
+          ask_ur:     'Aapka CNIC number kya hai?',
+          confirm_ur: 'Kya aapka CNIC {value} hai?',
+          type:       'text',
+          validation: 'exactly 13 digits, no dashes or spaces',
+        },
+        {
+          order:      2,
+          field_id:   'fLicenseNo',
+          label_en:   'License Number',
+          label_ur:   'لائسنس نمبر',
+          ask_ur:     'Aapka driving license number kya hai?',
+          confirm_ur: 'License number {value} hai?',
+          type:       'text',
+          validation: 'non-empty string',
+        },
+        {
+          order:      3,
+          field_id:   'fIssuanceDate',
+          label_en:   'License Issuance Date',
+          label_ur:   'لائسنس جاری ہونے کی تاریخ',
+          ask_ur:     'License kab issue hua tha? ' +
+                      'Saal, mahina aur din batayein.',
+          confirm_ur: 'Issuance date {value} hai?',
+          type:       'date',
+          format:     'YYYY-MM-DD',
+          validation: 'real past date',
+        },
+        {
+          order:      4,
+          field_id:   'fDuration',
+          label_en:   'Renewal Duration',
+          label_ur:   'رینیوول کی مدت',
+          ask_ur:     'Kitne saal ke liye renew karna hai?',
+          type:       'select',
+          options:    [
+            'For 1 Year',
+            'For 2 Years',
+            'For 3 Years',
+            'For 4 Years',
+            'For 5 Years',
+          ],
+          options_ur: [
+            'ek saal / 1 year = For 1 Year',
+            'do saal / 2 years = For 2 Years',
+            'teen saal / 3 years = For 3 Years',
+            'chaar saal / 4 years = For 4 Years',
+            'paanch saal / 5 years = For 5 Years',
+          ],
+        },
+        {
+          order:      5,
+          field_id:   'fPossession',
+          label_en:   'Is Old License in Possession',
+          label_ur:   'کیا پرانا لائسنس موجود ہے',
+          ask_ur:     'Kya aapka purana license aapke paas hai?',
+          type:       'select',
+          options:    [
+            'Yes, in my possession',
+            "No, it's lost",
+          ],
+          options_ur: [
+            'haan / yes = Yes, in my possession',
+            "nahi / no = No, it's lost",
+          ],
+        },
+      ],
+      postFieldSteps: [
+        {
+          step:           'captcha',
+          element_id:     '.math-captcha-wrapper',
+          label_en:       'Math Captcha',
+          label_ur:       'ریاضی کا سوال',
+          instruction_ur: 'Ek chota sa math sawaal hai. ' +
+                          'Main pointer se dikhaunga, ' +
+                          'aap khud jawab likhein.',
+        },
+        {
+          step:           'submit',
+          element_id:     '#btnSubmitApplication',
+          label_en:       'Submit Application',
+          label_ur:       'درخواست جمع کریں',
+          instruction_ur: 'Submit karne se pehle confirm karein.',
+        },
+      ],
+    },
+
+  };
+
+---
+
+## Change 4 — Add extractArgs() if not already present
+
+If extractArgs() does not already exist in the file, add it:
+
+  function extractArgs(rawPayload) {
+    let parsed;
+    try {
+      parsed = typeof rawPayload === 'string'
+        ? JSON.parse(rawPayload)
+        : rawPayload;
+    } catch (e) {
+      throw new Error('Payload not valid JSON: ' + rawPayload);
+    }
+
+    // Shape 1 — documented Uplift AI format
+    if (parsed.arguments && parsed.arguments.raw_arguments) {
+      return parsed.arguments.raw_arguments;
+    }
+    // Shape 2 — flat arguments object
+    if (parsed.arguments && typeof parsed.arguments === 'object') {
+      return parsed.arguments;
+    }
+    // Shape 3 — payload is args directly
+    if (parsed.element_id || parsed.field_name ||
+        parsed.page       || parsed.service_key) {
+      return parsed;
+    }
+    // Shape 4 — raw_arguments at top level
+    if (parsed.raw_arguments) {
+      return parsed.raw_arguments;
+    }
+    // Fallback
+    console.warn('[Maryam] Unknown payload shape:', parsed);
+    return parsed;
+  }
+
+If extractArgs() already exists, leave it untouched.
+
+---
+
+## Nothing else changes
+
+Do not modify:
+- Any of the four existing RPC handlers
+- connectAndRegisterTools() structure
+- Audio playback / TrackSubscribed logic
+- Mic button or status bubble logic
+- Session management functions
+- Pointer engine functions
+- Any HTML files
+- server.js
+
+---
+
+## What this enables after deployment
+
+User says any of these — all work:
+
+  "mujhe license renew karna hai"
+  "I want to renew my driving license"
+  "driving license renew karwana hai"
+  "license kho gaya, duplicate chahiye"
+  "ghar pe service chahiye license ke liye"
+  "learner license apply karna hai"
+  "I need a duplicate license"
+
+Maryam deduces the service_key and mode from natural 
+language (handled by the system prompt on the backend),
+calls start_service() with those values, and the browser 
+executes the full navigation sequence automatically —
+card click → mode selection → Apply button → form page.
+
+On the form, Maryam asks for each field verbally, 
+the user responds in Urdu or English, Maryam confirms, 
+and fill_field() fills it with the typewriter effect.
+
+The citizen never needs to touch the keyboard or know 
+which button to click. They only speak.
+
+Commit: "Add start_service tool + bilingual SITE_CONFIG"
+Push to GitHub.
