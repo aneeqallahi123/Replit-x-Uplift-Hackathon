@@ -1,0 +1,354 @@
+# Dastak Voice Agent — Track B Revision: Real Navigation Architecture
+
+## What went wrong with the current build
+The current voice-agent.js skips the actual website navigation entirely.
+It jumps straight to filling a form that is already open. This is not
+acceptable for the demo.
+
+The demo must show the agent NAVIGATING the website — the citizen watches
+the pointer move through the real UI, clicking real elements, opening real
+panels, in the exact sequence a human would follow. The form filling is
+the LAST step, not the only step.
+
+Think of it like a screen recording of someone using the website,
+except the someone is an AI agent driven by voice, and the citizen
+can watch every action happen live.
+
+---
+
+## The correct demo flow (this is what must be built)
+
+The agent must execute these steps IN ORDER, with the pointer visibly
+moving to each element before interacting with it:
+
+STEP 1 — HIGHLIGHT THE SERVICE CARD
+  Target: div[data-service-key="renewal_driving_license"]
+  Action: pointer moves to the "Renewal of Regular License" card,
+          hovers on it for 800ms (citizen can see which service 
+          is being selected), then programmatically clicks it
+  Status bubble: "لائسنس رینیوول سروس ڈھونڈ رہا ہوں..."
+
+STEP 2 — OFFCANVAS OPENS (wait for animation)
+  The click on the service card triggers Bootstrap offcanvas 
+  (#appFormOffcanvas) to slide in from the right.
+  Agent waits 700ms for the animation to complete before 
+  doing anything else.
+  Status bubble: "فارم کھل رہا ہے..."
+
+STEP 3 — POINTER MOVES TO FULL NAME FIELD
+  Target: #wizardFullName (inside the now-open offcanvas)
+  Action: pointer moves to the field, pulses once,
+          then fills it character by character (60ms per char)
+  Value: "علی احمد"
+  Status bubble: "نام بھر رہا ہوں..."
+  After fill: speakConfirmation("✓ نام: علی احمد")
+  — speakConfirmation is a Track A stub, currently shows text + 
+    waits 1200ms
+
+STEP 4 — POINTER MOVES TO CNIC FIELD
+  Target: #wizardCnic (inside the offcanvas)
+  Action: pointer moves to field, pulses, fills character by character
+  Value: "3520212345678"
+  Status bubble: "شناختی کارڈ نمبر بھر رہا ہوں..."
+  After fill: speakConfirmation("✓ شناختی کارڈ: 3520212345678")
+
+STEP 5 — POINTER MOVES TO NEXT BUTTON
+  Target: #btn-next
+  Action: pointer moves to the Next button, hovers 400ms,
+          then clicks it
+  Status bubble: "اگلا مرحلہ..."
+
+STEP 6 — STEP 2 OF WIZARD (Documents)
+  The wizard advances to Step 2 (document upload).
+  Agent waits 500ms for the transition.
+  For the demo, skip document upload — pointer moves directly
+  to #btn-next, hovers 400ms, clicks it.
+  Status bubble: "دستاویزات کا مرحلہ..."
+
+STEP 7 — STEP 3 OF WIZARD (Review & Payment)
+  The wizard advances to Step 3 (review).
+  Agent waits 500ms.
+  Pointer moves to #wizardTerms checkbox, clicks it to check it.
+  Wait 400ms.
+  Pointer moves to #btn-next, hovers 400ms, clicks it.
+  Status bubble: "درخواست جمع ہو رہی ہے..."
+
+STEP 8 — SUCCESS MODAL FIRES
+  The #successModal appears.
+  Agent hides the pointer.
+  Status bubble: "فارم جمع ہو گیا ✅"
+  Wait 2000ms, hide status bubble.
+
+This is the complete flow. Every step must have the pointer visibly
+moving to the target element BEFORE any action is taken on it.
+The pointer is what makes this trustworthy — the citizen sees exactly
+what the agent is about to do before it does it.
+
+---
+
+## Architecture: three separate layers (keep these cleanly separated)
+
+### Layer 1 — Pointer Engine (navigation primitive)
+This is the lowest level. It only knows how to move a circle around
+the screen and interact with DOM elements. It has no knowledge of
+the Dastak flow.
+
+Functions to build:
+
+  async movePointerTo(el):
+    - Gets el.getBoundingClientRect()
+    - Scrolls el into view if needed: 
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        await delay(400)  // wait for scroll
+    - Gets fresh getBoundingClientRect() AFTER scroll
+    - Centers pointer on element (subtract 22 from x and y)
+    - Shows pointer (adds .active class)
+    - Awaits delay(500) for CSS transition
+    - Returns
+
+  async clickElement(el):
+    - Calls movePointerTo(el)
+    - Pulses pointer (triggerPulse)
+    - await delay(300)
+    - el.click()
+    - await delay(200)
+
+  async typeIntoField(el, value):
+    - Calls movePointerTo(el)
+    - Pulses pointer
+    - Adds .field-highlight class to el
+    - Clears el.value
+    - Loops through each character:
+        el.value += char
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        el.dispatchEvent(new Event('change', { bubbles: true }))
+        await delay(60)
+    - await delay(300)
+    - Removes .field-highlight from el
+
+  async hoverElement(el, durationMs):
+    - Calls movePointerTo(el)
+    - await delay(durationMs)
+
+  hidePointer():
+    - Removes .active class from pointer
+    - Moves pointer off screen (left: -100px)
+
+IMPORTANT: movePointerTo must handle the case where the target element
+is inside an offcanvas or modal that may have been recently opened.
+After an offcanvas opens, elements inside it may not be in their final
+position yet. Always re-call getBoundingClientRect() AFTER any
+scroll or animation delay, not before.
+
+### Layer 2 — Navigation Controller (Dastak-specific steps)
+This layer knows the Dastak website structure and orchestrates the
+pointer engine to navigate through it. It calls Layer 1 functions
+only — it never manipulates the DOM directly.
+
+Build these navigation actions as individual async functions:
+
+  async navSelectRenewalService():
+    const card = document.querySelector(
+      '[data-service-key="renewal_driving_license"]'
+    )
+    setStatus('لائسنس رینیوول سروس ڈھونڈ رہا ہوں...')
+    await hoverElement(card, 800)
+    await clickElement(card)
+    await delay(700)  // wait for offcanvas animation
+
+  async navFillFullName(value):
+    const el = document.getElementById('wizardFullName')
+    setStatus('نام بھر رہا ہوں...')
+    await typeIntoField(el, value)
+    await speakConfirmation('✓ نام: ' + value)
+
+  async navFillCnic(value):
+    const el = document.getElementById('wizardCnic')
+    setStatus('شناختی کارڈ نمبر بھر رہا ہوں...')
+    await typeIntoField(el, value)
+    await speakConfirmation('✓ شناختی کارڈ: ' + value)
+
+  async navClickNext(statusText):
+    const btn = document.getElementById('btn-next')
+    setStatus(statusText || 'اگلا مرحلہ...')
+    await hoverElement(btn, 400)
+    await clickElement(btn)
+    await delay(600)
+
+  async navCheckTerms():
+    const checkbox = document.getElementById('wizardTerms')
+    setStatus('شرائط قبول کر رہا ہوں...')
+    await hoverElement(checkbox, 400)
+    await clickElement(checkbox)
+    checkbox.checked = true
+    await delay(300)
+
+  async navSubmitForm():
+    await navCheckTerms()
+    await navClickNext('درخواست جمع ہو رہی ہے...')
+
+### Layer 3 — Demo Orchestrator (the full end-to-end sequence)
+This layer calls Layer 2 navigation actions in order. It is the only
+place where the specific demo data (name, CNIC) is defined. This is
+also where Track A will plug in — when Track A is ready, this layer
+will get its values from real STT extraction instead of constants.
+
+  const DEMO_DATA = {
+    name: 'علی احمد',
+    cnic: '3520212345678',
+  }
+
+  async function runDemoFlow():
+    await navSelectRenewalService()
+    await navFillFullName(DEMO_DATA.name)
+    await navFillCnic(DEMO_DATA.cnic)
+    await navClickNext('پہلا مرحلہ مکمل...')   // Step 1 → Step 2
+    await delay(500)
+    await navClickNext('دستاویزات کا مرحلہ...')  // Step 2 → Step 3
+    await delay(500)
+    await navSubmitForm()                          // Step 3 → success
+    await delay(500)
+    hidePointer()
+    setStatus('فارم جمع ہو گیا ✅')
+    await delay(2000)
+    setStatus('', false)
+
+---
+
+## Scroll handling — critical requirement
+
+The services page is a real scrollable page. The service cards may be
+partially off screen depending on the viewport. The pointer engine
+MUST handle this correctly:
+
+In movePointerTo(el):
+  1. Check if el is fully in viewport using getBoundingClientRect()
+     — if top < 0 or bottom > window.innerHeight, scroll first
+  2. el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  3. await delay(500) — let scroll settle
+  4. THEN get fresh getBoundingClientRect() for the final position
+  5. THEN set pointer position
+
+If you set pointer position before scrolling completes, the pointer
+will appear in the wrong place. Always scroll first, wait, then
+position.
+
+---
+
+## Offcanvas timing — critical requirement
+
+When a Bootstrap offcanvas opens, elements inside it animate in.
+If you try to move the pointer to #wizardFullName immediately after
+triggering the offcanvas open, the element will either:
+  a) not be at its final position yet, or
+  b) not be visible/interactive yet
+
+The correct sequence is:
+  1. Click the service card → offcanvas starts opening
+  2. await delay(700) — wait for Bootstrap slide animation (300ms)
+     plus a safety buffer
+  3. ONLY THEN call movePointerTo(#wizardFullName)
+
+Do not reduce this delay. If the offcanvas animation is still running
+when you try to position the pointer, the pointer will appear in the
+wrong place or on a field that isn't yet interactive.
+
+---
+
+## What to keep from the existing voice-agent.js
+
+Keep all of the following exactly as they are:
+- All injected CSS styles (pointer, mic button, status bubble, 
+  field highlight, animations)
+- The panel HTML injection (#mic-status-bubble + #mic-btn)
+- The FIELD_MAP constant
+- All three Track A stub functions with their comment blocks:
+    captureAndTranscribe()
+    extractField(transcript)
+    speakConfirmation(urduText)
+- The agentRunning flag
+- The mic button click handler structure
+
+Change only:
+- Replace the old single-function demo flow with the three-layer
+  architecture described above
+- Replace any direct DOM manipulation in the flow with calls to
+  the Layer 1 pointer engine functions
+
+---
+
+## Track A integration points — keep these stubs exactly as before
+
+// ═══════════════════════════════════════════════════════════════
+// TRACK A INTEGRATION POINT 1 — Speech to Text (STT)
+// Currently: Does nothing — demo runs hardcoded DEMO_DATA
+// Replace with: MediaRecorder → Uplift AI STT → Urdu transcript
+// Contract: async captureAndTranscribe() → string | null
+// ═══════════════════════════════════════════════════════════════
+async function captureAndTranscribe() {
+  return null; // STUB
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TRACK A INTEGRATION POINT 2 — Field Extraction (NLU)
+// Currently: Returns null — orchestrator uses DEMO_DATA directly
+// Replace with: transcript → LLM extraction → structured JSON
+// Contract: async extractField(transcript) →
+//   { field: string, value: string, confidence: number } | null
+// ═══════════════════════════════════════════════════════════════
+async function extractField(transcript) {
+  return null; // STUB
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TRACK A INTEGRATION POINT 3 — TTS Read-back
+// Currently: Shows text in status bubble + waits 1200ms
+// Replace with: Uplift AI TTS → play audio → wait for finish
+// Contract: async speakConfirmation(urduText) → void
+// ═══════════════════════════════════════════════════════════════
+async function speakConfirmation(urduText) {
+  setStatus(urduText); // STUB — Track A replaces with real TTS
+  await delay(1200);
+}
+
+---
+
+## Definition of done
+
+The following must be true before this revision is complete:
+
+1. Page loads — green mic button visible bottom-right ✓
+2. Click mic button — pointer appears on screen ✓
+3. Pointer visibly moves to "Renewal of Regular License" card ✓
+4. Pointer hovers on card for ~800ms (citizen sees the selection) ✓
+5. Card is clicked — offcanvas slides in from right ✓
+6. Agent waits for offcanvas animation to finish ✓
+7. Pointer moves INSIDE the offcanvas to Full Name field ✓
+8. Full Name fills character by character ✓
+9. Pointer moves to CNIC field ✓
+10. CNIC fills character by character ✓
+11. Pointer moves to Next button, hovers, clicks it ✓
+12. Wizard advances to Step 2 — pointer moves to Next, clicks it ✓
+13. Wizard advances to Step 3 — pointer moves to terms checkbox ✓
+14. Checkbox is checked ✓
+15. Pointer moves to submit button, clicks it ✓
+16. Success modal fires ✓
+17. Pointer hides, status bubble confirms in Urdu, fades out ✓
+
+At no point should any step happen without the pointer first moving
+to the target element. If the pointer is not visible moving to
+something before it happens, that step is broken.
+
+---
+
+## Final note on scope
+
+Do not add anything beyond what is described here. No new pages,
+no new offcanvases, no backend changes, no API calls. The only
+files that should change are voice-agent.js (full rewrite using
+the three-layer architecture) and nothing else.
+
+The goal is one clean, reliable, fully-navigated demo flow that
+a citizen can watch and immediately understand: the agent is
+operating the website on their behalf, step by step, visibly,
+before their eyes.
