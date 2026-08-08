@@ -337,16 +337,23 @@ function hidePointer() {
    ════════════════════════════════════════════════════════════════ */
 
 /**
- * Step 1: Hover the Renewal of Regular License card, then click it.
- * Waits 700ms after click for the Bootstrap offcanvas animation.
+ * Step 1: Hover the Renewal of Regular License card (pointer visible),
+ * then open the offcanvas directly via the Bootstrap API.
+ * This keeps the "agent is selecting this service" animation intact
+ * while leaving normal card clicks unaffected (they expand the inline panel).
  */
 async function navSelectRenewalService() {
   const card = document.querySelector('[data-service-key="renewal_driving_license"]');
   setStatus('لائسنس رینیوول سروس ڈھونڈ رہا ہوں...');
   await hoverElement(card, 800);
   setStatus('فارم کھل رہا ہے...');
-  await clickElement(card);
-  await delay(700); // wait for offcanvas slide animation
+  triggerPulse();
+  await delay(300);
+  // Open offcanvas directly — does not trigger the card's normal inline-panel handler
+  bootstrap.Offcanvas.getOrCreateInstance(
+    document.getElementById('appFormOffcanvas')
+  ).show();
+  await delay(700); // wait for Bootstrap slide animation
 }
 
 /**

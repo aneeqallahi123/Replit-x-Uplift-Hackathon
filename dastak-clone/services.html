@@ -547,21 +547,9 @@
 
         offcanvasEl.addEventListener('show.bs.offcanvas', function () { resetWizard(); });
 
-        // Intercept clicks on the renewal card:
-        //   1. stopPropagation (capture phase) prevents services.js row handler from
-        //      expanding the inline panel.
-        //   2. We explicitly open the offcanvas via Bootstrap API so the agent's
-        //      programmatic .click() also works correctly.
-        // NOTE: data-bs-toggle is intentionally NOT used on the card because
-        // Bootstrap's delegated handler runs in bubble phase and would be blocked
-        // by our stopPropagation. Calling the API directly sidesteps that issue.
-        var renewalCard = document.querySelector('[data-service-key="renewal_driving_license"]');
-        if (renewalCard) {
-            renewalCard.addEventListener('click', function (e) {
-                e.stopPropagation();
-                bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
-            }, true); // capture phase — fires before services.js bubble listener
-        }
+        // Normal card clicks expand the inline details panel (handled by services.js).
+        // The voice agent opens the offcanvas directly via navSelectRenewalService()
+        // in voice-agent.js — no click interception needed here.
     })();
     </script>
 
