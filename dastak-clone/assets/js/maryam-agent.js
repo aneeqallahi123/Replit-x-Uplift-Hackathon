@@ -777,7 +777,13 @@
       };
     }
 
-    // ── Captcha step: NON-BLOCKING — advance only when answer is correct ──
+    // ── Captcha step: SEMI-BLOCKING, driven by INPUT not CLICK ──────
+    //
+    // The citizen clicks the box and *then* types. A click listener
+    // therefore fires immediately, reporting "still wrong or empty", and
+    // no further click ever arrives once they are focused in the box —
+    // that was a permanent deadlock. Watch the input instead and only
+    // report once the answer is actually correct.
     if (step.captcha) {
       const captcha = getCaptchaState();
       if (captcha.correct) {
@@ -787,56 +793,57 @@
         return executeCurrentFlowStep(isRetryAfterMismatch);
       }
 
-      // Point at the captcha area and return immediately.
-      // The click listener does NOT advance stepIndex — the agent must
-      // call guide_next_step() again to re-check the answer.
+      let wrapper;
       try {
-        const el = await waitForElement('.math-captcha-wrapper', 5000);
-        await movePointerTo(el);
-        triggerPulse();
-
-        const myOp = ++pointOpSeq;
-        if (activePointCancel) activePointCancel('superseded by captcha step');
-
-        const onClickOnce = function () {
-          el.removeEventListener('click', onClickOnce, true);
-          if (myOp !== pointOpSeq) return;
-          activePointCancel = null;
-          // Do NOT advance stepIndex — captcha may still be wrong.
-          // Just notify the agent to re-check.
-          const state = getCaptchaState();
-          if (!maryamRoom || !maryamConnected) return;
-          const msg =
-            '[CLICK: captcha] (system message) Citizen interacted with the captcha. ' +
-            'Captcha is ' + (state.correct ? 'CORRECT' : 'still wrong or empty') + '. ' +
-            'Call guide_next_step() to check the answer and proceed.';
-          maryamRoom.localParticipant
-            .sendText(msg, { topic: 'lk.chat' })
-            .catch(function () {});
-        };
-        el.addEventListener('click', onClickOnce, true);
-        activePointCancel = function (reason) {
-          el.removeEventListener('click', onClickOnce, true);
-          activePointCancel = null;
-          console.log('[Maryam] Captcha listener removed:', reason);
-        };
+        wrapper = await waitForElement('.math-captcha-wrapper', 3000);
       } catch (err) {
         console.error('[Maryam] Captcha element not found:', err.message);
+        return {
+          active: true,
+          step: 'captcha',
+          captcha_correct: false,
+          error: err.message,
+          presentationInstructions:
+            'Security sawal screen par nahi mil raha. User se kahein ke ' +
+            'page thora scroll karein, phir guide_next_step dobara call karein.',
+        };
+      }
+
+      await movePointerTo(wrapper);
+      triggerPulse();
+
+      // Wait (up to ~30 s) for the answer to become CORRECT. Resolves on
+      // the input event — never a timer poll — so typing alone advances
+      // the flow with no further clicking required.
+      const state = await awaitCaptchaCorrect(wrapper, CAPTCHA_TIMEOUT_MS);
+
+      if (state.correct) {
+        hidePointer();
+        // Do NOT advance here — the next guide_next_step() re-checks and
+        // advances, keeping a single advance path and a bounded call.
+        return {
+          active: true,
+          step: 'captcha',
+          captcha_correct: true,
+          presentationInstructions:
+            'Shabash! Security sawal ka jawab bilkul theek hai. Yeh batayein ' +
+            'aur foran guide_next_step() call karein taake submit ka qadam shuru ho. ' +
+            'Jawab khud kabhi na bolein.',
+        };
       }
 
       return {
         active: true,
         step: 'captcha',
         captcha_correct: false,
-        captcha_answered: captcha.answered,
+        still_waiting: true,
+        captcha_answered: getCaptchaState().answered,
         captcha_question: captcha.question,
-        pointed: true,
-        waiting_for_click: true,
         presentationInstructions:
-          'Screen par captcha highlight ho gaya hai. User ko batayein ke ' +
-          '"' + (captcha.question || 'security sawal') + '" ka jawab khud type karein — ' +
-          'aap jawab mat batayein. Jab woh type kar lein aur [CLICK: captcha] ' +
-          'message aaye, guide_next_step call karein taake main check kar sakoon.',
+          'Screen par security sawal highlight ho gaya hai: "' +
+          (captcha.question || 'chota sa math sawal') + '". User ko kahein ke ' +
+          'woh iska jawab khud box mein type karein — aap jawab hargiz na batayein. ' +
+          'Phir guide_next_step() dobara call karein taake main check kar sakoon.',
       };
     }
 
@@ -1130,6 +1137,84 @@
   // stay comfortably under the remote tool timeout (30 s) so the agent
   // always receives our result rather than a remote timeout error.
   const POINT_TIMEOUT_MS = 20000;
+
+  // How long the captcha step may hold a tool call open. Longer than a
+  // pointing step because the citizen has to read and solve a sum.
+  const CAPTCHA_TIMEOUT_MS = 30000;
+
+  // Resolves once the captcha answer is actually CORRECT — driven by the
+  // input's own `input` event, never a polling timer. Also sends the
+  // redundant [CLICK: captcha] notification the moment it turns correct.
+  //
+  // Returns { correct: true } | { correct: false, timed_out: true }
+  //        | { correct: false, cancelled: true, reason }
+  //
+  // On timeout the listener deliberately stays attached, so a citizen who
+  // solves it late still triggers the notification.
+  function awaitCaptchaCorrect(wrapper, timeoutMs) {
+    const myOp = ++pointOpSeq;
+    if (activePointCancel) activePointCancel('superseded by captcha step');
+
+    return new Promise((resolve) => {
+      const input = wrapper.querySelector('.math-captcha-input');
+      if (!input) {
+        return resolve({ correct: false, cancelled: true,
+                         reason: 'captcha input not found' });
+      }
+      if (getCaptchaState().correct) return resolve({ correct: true });
+
+      let settled = false;
+      let disposed = false;
+      let timer = null;
+
+      function dispose() {
+        if (disposed) return;
+        disposed = true;
+        if (timer) clearTimeout(timer);
+        input.removeEventListener('input', onInput);
+        input.removeEventListener('change', onInput);
+        if (activePointCancel === cancel) activePointCancel = null;
+      }
+
+      function settle(result) {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      }
+
+      function cancel(reason) {
+        dispose();
+        settle({ correct: false, cancelled: true, reason: reason });
+      }
+      activePointCancel = cancel;
+
+      function onInput() {
+        if (myOp !== pointOpSeq) return; // superseded
+        if (!getCaptchaState().correct) return; // wait until it's actually right
+        dispose();
+        // Redundant secondary signal — harmless if lk.chat is not ingested.
+        if (maryamRoom && maryamConnected) {
+          maryamRoom.localParticipant.sendText(
+            '[CLICK: captcha] (system message) Captcha answered CORRECTLY. ' +
+            'Call guide_next_step() now to proceed to submit.',
+            { topic: 'lk.chat' }
+          ).catch(function () {});
+        }
+        settle({ correct: true });
+      }
+
+      input.addEventListener('input', onInput);
+      input.addEventListener('change', onInput);
+
+      if (timeoutMs > 0) {
+        timer = setTimeout(function () {
+          // Deliberately NOT disposing — a late correct answer still notifies.
+          console.log('[Maryam] Captcha wait timed out (still listening)');
+          settle({ correct: false, timed_out: true });
+        }, timeoutMs);
+      }
+    });
+  }
 
   // ── The ONE pointing engine ─────────────────────────────────────────
   // Moves the pointer to the element, shows the Urdu prompt, and resolves
