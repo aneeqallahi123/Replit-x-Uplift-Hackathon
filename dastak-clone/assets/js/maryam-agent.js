@@ -502,7 +502,16 @@
 
   // -------------------------------------------------------------------
   // SECTION 8 — LiveKit connection and RPC registration
+  //
+  // Chrome's autoplay policy blocks AudioContext creation unless it
+  // happens inside a user-gesture handler. We therefore do NOT connect
+  // on page load — we wait for the citizen to click the mic button.
+  // On subsequent page navigations we check whether a saved session
+  // token exists and auto-reconnect (the first-page click already
+  // satisfied the gesture requirement for that tab session).
   // -------------------------------------------------------------------
+  let _room = null; // shared room reference across helpers
+
   async function connectAndRegisterTools() {
     if (typeof LivekitClient === 'undefined') {
       console.error('[Maryam] LivekitClient not loaded.');
@@ -514,6 +523,7 @@
     try {
       const session = await getOrResumeSession();
       const room = new LivekitClient.Room();
+      _room = room;
 
       // Register all four RPC tools
       room.localParticipant.registerRpcMethod(
@@ -554,39 +564,72 @@
       await room.connect(session.wsUrl, session.token);
       console.log('[Maryam] Connected on:', getCurrentPageKey());
 
-      // Enable mic automatically — Maryam is always listening
+      // Enable mic — this is always called from inside a click handler
+      // (first connect) or a recognised resume (subsequent pages), so
+      // the AudioContext is allowed by Chrome.
       await room.localParticipant.setMicrophoneEnabled(true);
 
-      // Update mic button to show connected state
+      // Update mic button to show connected/live state
       if (micBtn) {
         micBtn.classList.remove('connecting');
         micBtn.classList.add('connected');
-        micBtn.title = 'مریم سے بات کر رہے ہیں';
-        // Mic button now just toggles mute/unmute
-        micBtn.addEventListener('click', async () => {
+        micBtn.textContent = '🎤';
+        micBtn.title = 'مریم سے بات کر رہے ہیں — کلک کریں مائیک بند کرنے کے لیے';
+        micBtn.onclick = async () => {
           const isMuted = !room.localParticipant.isMicrophoneEnabled;
           await room.localParticipant.setMicrophoneEnabled(isMuted);
           micBtn.textContent = isMuted ? '🎤' : '🔇';
           micBtn.style.background = isMuted ? '#167B38' : '#e53e3e';
-        });
+        };
       }
     } catch (err) {
       console.error('[Maryam] Connection failed:', err);
       if (micBtn) {
         micBtn.classList.remove('connecting');
         micBtn.style.background = '#e53e3e';
-        micBtn.title = 'Connection failed — refresh to retry';
+        micBtn.title = 'کنکشن ناکام — دوبارہ لوڈ کریں';
         micBtn.textContent = '⚠️';
+        // Allow retry on click
+        micBtn.onclick = () => {
+          sessionStorage.removeItem('maryam_session');
+          window.location.reload();
+        };
       }
     }
   }
 
   // -------------------------------------------------------------------
   // SECTION 9 — Boot on DOMContentLoaded
+  //
+  // If a saved session exists from a previous page (citizen already
+  // clicked the mic button and Maryam navigated here), auto-reconnect
+  // — the user gesture already happened on the previous page and the
+  // same tab session satisfies Chrome's autoplay requirement.
+  //
+  // If no saved session, show the mic button in idle state and connect
+  // only when the citizen clicks it (satisfying the user-gesture rule).
   // -------------------------------------------------------------------
   document.addEventListener('DOMContentLoaded', () => {
     injectPointerStylesOnce();
     injectPointerElements();
-    connectAndRegisterTools();
+
+    const micBtn = document.getElementById('maryam-mic-btn');
+    const hasSavedSession = !!loadSavedSession();
+
+    if (hasSavedSession) {
+      // Previous page triggered the gesture; safe to reconnect silently.
+      connectAndRegisterTools();
+    } else {
+      // First visit — wait for a user click before touching AudioContext.
+      if (micBtn) {
+        micBtn.textContent = '🎤';
+        micBtn.title = 'مریم سے بات کریں';
+        micBtn.onclick = () => {
+          micBtn.classList.add('connecting');
+          micBtn.onclick = null; // prevent double-click
+          connectAndRegisterTools();
+        };
+      }
+    }
   });
 })();
