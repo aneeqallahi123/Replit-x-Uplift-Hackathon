@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dastak — Apply</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="assets/css/style.css">
+    <link rel="icon" href="assets/images/favicon.ico">
+
+    <style>
+        body { background: #fff; }
+
+        .apply-page-wrap {
+            padding-top: 100px;
+            padding-bottom: 60px;
+            padding-left: 2%;
+            padding-right: 2%;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            background: #f7f7f7;
+            color: #272e26;
+            margin-right: 10px;
+            text-decoration: none;
+        }
+        .back-link:hover { background: #eee; color: #167B38; }
+
+        .service-title-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+        .service-title-row h1 {
+            font-size: 26px;
+            font-weight: 700;
+            color: #272e26;
+            margin: 0;
+        }
+
+        .new-application-card {
+            background: #f9fafb;
+            border-radius: 16px;
+            padding: 28px;
+        }
+
+        .new-application-card .form-label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #272e26;
+        }
+        .new-application-card .form-label .req { color: #dc3545; }
+
+        .new-application-card .form-control,
+        .new-application-card .form-select {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 14px;
+        }
+
+        .new-application-card h6.section-heading {
+            font-weight: 700;
+            font-size: 16px;
+            color: #272e26;
+            margin: 28px 0 16px;
+        }
+        .new-application-card h6.section-heading:first-of-type { margin-top: 0; }
+
+        .avatar-upload-circle {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            background: #eef1ee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 44px;
+            color: #b7bdb9;
+            overflow: hidden;
+            margin: 0 auto 10px;
+        }
+        .avatar-upload-circle img { width: 100%; height: 100%; object-fit: cover; }
+
+        .upload-tip {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            margin-bottom: 18px;
+        }
+        .upload-tip:last-child { margin-bottom: 0; }
+        .upload-tip-badge {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #fff;
+            border: 1.5px solid #e5e7eb;
+            flex-shrink: 0;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #b7bdb9;
+            font-size: 18px;
+        }
+        .upload-tip-badge .status-dot {
+            position: absolute;
+            bottom: -3px;
+            right: -3px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: #fff;
+            border: 2px solid #fff;
+        }
+        .status-dot.bad { background: #dc3545; }
+        .status-dot.good { background: #167B38; }
+        .upload-tip h6 { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+        .upload-tip p { font-size: 12.5px; color: #838e91; margin: 0; }
+
+        .cnic-dropzone {
+            border: 1.5px dashed #d1d5db;
+            border-radius: 14px;
+            background: #fff;
+            padding: 24px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .cnic-dropzone:hover { border-color: #167B38; background: #f7fdf9; }
+        .cnic-dropzone .cnic-icon { font-size: 30px; color: #d1d5db; margin-bottom: 8px; }
+        .cnic-dropzone .upload-btn-circle {
+            width: 44px; height: 44px; border-radius: 50%;
+            background: var(--secondary-color); color: #272e26;
+            display: flex; align-items: center; justify-content: center;
+            margin: 8px auto; font-size: 16px;
+        }
+        .cnic-dropzone h6 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+        .cnic-dropzone p { font-size: 12px; color: #838e91; margin: 0; }
+        .cnic-dropzone.has-file { border-color: #167B38; background: #f7fdf9; }
+        .cnic-dropzone img.preview-thumb { max-width: 100%; max-height: 90px; border-radius: 8px; margin-bottom: 8px; }
+
+        .warn-note {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: #6b5f2f;
+            margin-bottom: 16px;
+        }
+        .warn-note i { color: #dc3545; font-size: 20px; }
+
+        /* Success screen */
+        #successView { display: none; }
+
+        /* Mobile sidebar toggle */
+        .sidebar-toggle-btn {
+            display: none;
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            z-index: 1200;
+            background: #167B38;
+            color: #fff;
+            border: none;
+            border-radius: 30px;
+            padding: 10px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+        }
+        .sidebar-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 1050;
+        }
+        @media (max-width: 991px) {
+            .sidebar-toggle-btn { display: inline-flex; align-items: center; gap: 8px; }
+            .sidebar-backdrop.show { display: block; }
+        }
+    </style>
+</head>
+
+<body class="home_3_body">
+
+    <!-- Navbar (logged-in state) -->
+    <nav class="navbar navbar-expand-lg fixed-top home_3_header">
+        <div class="container-fluid">
+            <a class="navbar-brand navbrand_home_3" href="index.html">
+                <img src="assets/images/logo.svg" alt="Dastak Logo">
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#dastakNavbar" aria-controls="dastakNavbar">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="offcanvas-lg offcanvas-start menu_offcanvas" tabindex="-1" id="dastakNavbar" aria-labelledby="dastakNavbarLabel">
+                <div class="offcanvas-header border-bottom">
+                    <h5 class="offcanvas-title" id="dastakNavbarLabel"><img src="assets/images/logo_new.svg" alt="Dastak Logo"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#dastakNavbar" aria-label="Close"></button>
+                </div>
+                <div class="offcanvas-body p-4 p-lg-0">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0 custom-nav-links gap-lg-2">
+                        <li class="nav-item"><a class="nav-link" href="index.html">Home</a></li>
+                        <li class="nav-item"><a class="nav-link" href="index.html#about">About</a></li>
+                        <li class="nav-item"><a class="nav-link active" href="services.html">Services</a></li>
+                        <li class="nav-item"><a class="nav-link" href="index.html#partners">Our Partners</a></li>
+                        <li class="nav-item"><a class="nav-link" href="index.html#news">News</a></li>
+                        <li class="nav-item"><a class="nav-link" href="index.html#contact">Contact</a></li>
+                    </ul>
+
+                    <div class="d-flex align-items-center flex-column flex-lg-row gap-3 mt-3 mt-lg-0 header-controls">
+                        <div class="custom-lang-toggle d-flex align-items-center gap-2 me-lg-2 order-2 order-lg-1">
+                            <a href="#"><span class="lang-text active">Eng</span></a>
+                            <div class="lang-switch-track" style="cursor:pointer;"><div class="lang-switch-knob"></div></div>
+                            <a href="#"><span class="lang-text urdu-font">اردو</span></a>
+                        </div>
+                        <div class="d-flex flex-column flex-md-row align-items-center gap-2 order-1 order-lg-2">
+                            <a href="#" class="btn custom-btn-outline">Become a Facilitator</a>
+                            <div class="dropdown">
+                                <button class="btn d-flex align-items-center gap-2 border-0 bg-transparent dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                    <span style="width:34px;height:34px;border-radius:50%;background:#167B38;color:#fff;display:inline-flex;align-items:center;justify-content:center;">
+                                        <i class="fas fa-user"></i>
+                                    </span>
+                                    <span class="fw-bold" style="color:#272e26;">Aneeq Allahi</span>
+                                </button>
+                                <ul class="dropdown-menu dropdown-menu-end">
+                                    <li><a class="dropdown-item" href="#"><i class="fas fa-user me-2"></i>My Profile</a></li>
+                                    <li><a class="dropdown-item" href="#"><i class="fas fa-file-alt me-2"></i>My Applications</a></li>
+                                    <li><hr class="dropdown-divider"></li>
+                                    <li><a class="dropdown-item" href="index.html"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="demo-banner mx-auto" style="max-width:1600px; margin-top:100px;">
+        <i class="fas fa-flask me-2"></i>
+        This application form is a static front-end mockup — nothing is uploaded, saved, or submitted anywhere.
+    </div>
+
+    <div class="apply-page-wrap">
+        <div class="row g-4">
+
+            <!-- Sidebar -->
+            <div class="col-lg-auto fixed_sidebar_serviecs_details" id="serviceSidebar">
+                <div class="service-title-row">
+                    <a href="services.html" class="back-link"><i class="fas fa-chevron-left"></i></a>
+                    <h1 id="sidebarServiceName">Service</h1>
+                </div>
+
+                <h6 class="fw-bold mb-3">Required Documents</h6>
+                <div class="table-responsive">
+                    <table class="table table-borderless custom-doc-table align-middle tbals_csss">
+                        <thead class="table-dark">
+                            <tr>
+                                <th scope="col" class="rounded-start" style="width:55px;">Sr #</th>
+                                <th scope="col" class="w-50">Documents</th>
+                                <th scope="col" class="text-center">Original</th>
+                                <th scope="col" class="text-center">Photocopy</th>
+                                <th scope="col" class="text-center rounded-end">Attested</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sidebarDocRows"></tbody>
+                    </table>
+                </div>
+
+                <div class="mt-3 mb-4">
+                    <h6 class="fw-bold mb-1">Note:</h6>
+                    <p class="text-muted mb-0" style="font-size:0.8rem; line-height:1.5;" id="sidebarNote"></p>
+                </div>
+
+                <div class="fee_detail_card fee_detail_card_2">
+                    <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+                        <div class="d-flex gap-2">
+                            <div><i class="fas fa-file-invoice-dollar" style="color:#F5BB18; font-size:28px;"></i></div>
+                            <div><h6 class="fee_card_details_title mb-0">Fee of Application</h6></div>
+                        </div>
+                        <div>
+                            <p class="fee_flex small_2 mb-0">Services: <span class="ms-1 fw-bold">Varies</span></p>
+                            <p class="fee_flex small_2 mb-0">Platform fee: <span class="ms-1 fw-bold"><small class="text-uppercase">pkr</small> <span id="sidebarPlatformFee">15</span></span></p>
+                            <p class="fee_flex small_2 mb-0" id="sidebarFacilitatorRow" style="display:none;">
+                                <span>Facilitator fee:</span>
+                                <span class="ms-1 fw-bold"><small class="text-uppercase">pkr</small> <span id="sidebarFacilitatorFee">950</span></span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="fee_detail_breakdown_card fee_detail_breakdown_card_2 mb-4">
+                    <div><h6 class="fee_card_details_title text-success mb-0 text-end">Varies + <small class="text-uppercase">pkr</small> <span id="sidebarTotalFee">15</span></h6></div>
+                </div>
+            </div>
+
+            <!-- Main form -->
+            <div class="col stepper-main-wrapper">
+
+                <!-- ===================== APPLICATION FORM ===================== -->
+                <div id="formView">
+                    <h2 class="section-title mb-4" style="font-size:28px;" id="formHeading">New Application</h2>
+                    <div class="new-application-card" id="formCardBody"></div>
+                </div>
+
+                <!-- ===================== SUCCESS VIEW ===================== -->
+                <div id="successView">
+                    <div class="new-application-card text-center" style="max-width:480px;">
+                        <div class="success_icon_outer"><div class="success_icon_inner"><i class="fas fa-check"></i></div></div>
+                        <h5 class="success_modal_title mt-3">Application Submitted!</h5>
+                        <p class="success_modal_subtitle">
+                            Your application for <strong id="successServiceName">this service</strong> has been received.
+                            <br><span class="text-muted" style="font-size:12px;">(Demo only — no real application was created.)</span>
+                        </p>
+
+                        <div class="payment_detail_card d-flex align-items-center justify-content-between mb-2 text-start">
+                            <div>
+                                <span class="detail_label">Application ID</span>
+                                <span class="detail_value" id="successAppId">—</span>
+                            </div>
+                            <button type="button" class="btn btn-copy" id="btnCopyId">Copy</button>
+                        </div>
+
+                        <div class="payment_amount_card p-3 rounded d-flex align-items-center justify-content-between mb-3">
+                            <span class="detail_label_large">Amount Due</span>
+                            <span class="detail_value_large" id="successAmount">PKR 0</span>
+                        </div>
+
+                        <button type="button" class="btn btn-pay-now w-100 mb-2" id="btnPayNow">Pay Now</button>
+                        <a href="services.html?openTrack=1" class="btn btn-track-app-modal w-100 mb-3">Track Application</a>
+                        <div><a href="services.html" class="link-do-later">Back to Services</a></div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <button type="button" class="sidebar-toggle-btn" id="sidebarToggleBtn"><i class="fas fa-info-circle"></i> Service Details</button>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/services-data.js?v=2"></script>
+    <script src="apply.js?v=2"></script>
+</body>
+
+</html>
