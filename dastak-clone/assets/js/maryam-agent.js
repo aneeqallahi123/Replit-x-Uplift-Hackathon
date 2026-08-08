@@ -893,80 +893,116 @@
       };
     }
 
-    // ── Pointing step: NON-BLOCKING — point and return immediately ──
+    // ── Pointing step: SEMI-BLOCKING ────────────────────────────────
     //
-    // The RPC returns as soon as the pointer is positioned. A one-time
-    // click listener fires when the citizen clicks:
-    //  • persists flow state (before any navigation tears the page down)
-    //  • sends a [CLICK] text message so the agent knows what happened
-    //    and what to do next WITHOUT needing the RPC to still be alive.
+    // Non-navigating steps await the click for up to POINT_TIMEOUT_MS and
+    // return the outcome in the tool result itself, so the agent always
+    // has something to say even if the [CLICK] text channel is never
+    // ingested by the remote worker.
+    //
+    // Navigating steps return immediately — the page unload destroys the
+    // RPC response anyway — and rely on the fresh page's pushPageContext
+    // to resume the flow. The listener is still attached through the same
+    // engine so scroll tracking, removal watching and cleanup all apply.
     let selector = step.selector(flow);
     if (!document.querySelector(selector) && step.fallbackSelector) {
       selector = step.fallbackSelector;
     }
 
-    try {
-      const el = await waitForElement(selector, 8000);
-      await movePointerTo(el);
-      triggerPulse();
+    // On click: persist state (before any navigation unloads the page),
+    // then send the redundant [CLICK] notification.
+    const onClicked = function () {
+      const current = loadFlow();
+      if (!current) return;
+      // Only advance if nothing else already moved past this step.
+      if (current.stepIndex === flow.stepIndex) {
+        current.stepIndex += 1;
+        saveFlow(current);
+      }
+      if (step.navigates) {
+        const saved = loadSavedSession();
+        if (saved) saveSession({ ...saved, agentNavigated: true });
+      }
+      sendClickNotification(step, current);
+    };
 
-      const myOp = ++pointOpSeq;
-      if (activePointCancel) activePointCancel('superseded by guided step');
-
-      // One-time click listener — fires when citizen clicks the element.
-      const onClickOnce = function () {
-        el.removeEventListener('click', onClickOnce, true);
-        if (myOp !== pointOpSeq) return; // operation superseded
-        activePointCancel = null;
-        hidePointer();
-
-        // Persist state BEFORE navigation can unload the page.
-        flow.stepIndex += 1;
-        saveFlow(flow);
-        if (step.navigates) {
-          const saved = loadSavedSession();
-          if (saved) saveSession({ ...saved, agentNavigated: true });
-        }
-
-        // Send a [CLICK] notification — fire-and-forget.
-        // This reaches the agent even if the connection drops a moment
-        // later during navigation, because it's in flight before unload.
-        sendClickNotification(step, flow);
-      };
-      el.addEventListener('click', onClickOnce, true);
-
-      // Allow the next point call (or page unload) to clean up the listener.
-      activePointCancel = function (reason) {
-        el.removeEventListener('click', onClickOnce, true);
-        activePointCancel = null;
-        console.log('[Maryam] Click listener removed:', reason);
-      };
-
-    } catch (err) {
-      console.error('[Maryam] Could not point at', selector, err.message);
+    if (step.navigates) {
+      // Fire and forget — do not await, the response cannot survive unload.
+      pointAndAwaitClick(selector, { timeoutMs: 0, onClicked: onClicked })
+        .then(function (r) {
+          if (!r.clicked) {
+            console.log('[Maryam] Navigating step point ended without click:', step.id, r);
+          }
+        });
       return {
         active: true,
         step: step.id,
-        pointed: false,
-        error: err.message,
+        pointed: true,
+        navigates: true,
+        waiting_for_click: true,
         presentationInstructions:
-          'Element screen par nahi mila: ' + selector + '. ' +
-          'User ko manually navigate karne mein madad karein, ' +
-          'ya guide_next_step dobara call karein.',
+          (step.say_now ||
+            'Screen par ek green button highlight ho gaya hai. ' +
+            'User ko batayein ke woh highlighted element par click karein.') +
+          ' Uss click se naya page khulega. Koi tool call na karein — ' +
+          'agla [PAGE UPDATE] message aane ka intezaar karein, phir ' +
+          'foran guide_next_step() call karein.',
       };
     }
 
+    const outcome = await pointAndAwaitClick(selector, {
+      timeoutMs: POINT_TIMEOUT_MS,
+      onClicked: onClicked,
+    });
+
+    if (outcome.clicked) {
+      return {
+        active: true,
+        step: step.id,
+        clicked: true,
+        presentationInstructions:
+          (step.say_after || 'Theek hai, ho gaya.') +
+          ' Yeh line bolein aur foran guide_next_step() call karein.',
+      };
+    }
+
+    if (outcome.timed_out) {
+      return {
+        active: true,
+        step: step.id,
+        clicked: false,
+        still_waiting: true,
+        presentationInstructions:
+          'User ne abhi tak click nahi kiya. Narmi se yaad dilayein ke ' +
+          'screen par jo cheez green dot se highlight ho rahi hai uss par ' +
+          'tap karein — pointer wahin maujood hai. Phir guide_next_step() ' +
+          'dobara call karein.',
+      };
+    }
+
+    if (outcome.reason === 'superseded while waiting for element' ||
+        (outcome.reason || '').indexOf('superseded') !== -1) {
+      // Another point op took over (usually a duplicate guide_next_step).
+      return {
+        active: true,
+        step: step.id,
+        superseded: true,
+        presentationInstructions:
+          'Pointer pehle se hi sahi jagah par hai. User ko highlighted ' +
+          'element par click karne ko kahein.',
+      };
+    }
+
+    console.error('[Maryam] Could not point at', selector, outcome.reason);
     return {
       active: true,
       step: step.id,
-      pointed: true,
-      waiting_for_click: true,
+      pointed: false,
+      error: outcome.reason,
       presentationInstructions:
-        (step.say_now ||
-          'Screen par ek green button highlight ho gaya hai. ' +
-          'User ko batayein ke woh highlighted element par click karein.') +
-        ' Jab woh click karein ge, aapko "[CLICK: ' + step.id + ']" ' +
-        'message aayega — uss ke baad agle instructions follow karein.',
+        'Element screen par nahi mila: ' + selector + '. ' +
+        'User ko manually navigate karne mein madad karein, ' +
+        'ya guide_next_step dobara call karein.',
     };
   }
 
@@ -1005,7 +1041,11 @@
       msg +=
         'The citizen is still on the same page. ' +
         'Next step is "' + (nextStep ? nextStep.id : 'done') + '". ' +
-        'Speak the line above, then call guide_next_step() immediately.';
+        'This is a REDUNDANT backup signal: the guide_next_step()/start_service() ' +
+        'tool result for this step already told you the same thing. ' +
+        'If you have already spoken that line and called guide_next_step(), ' +
+        'ignore this message. Otherwise speak the line above and call ' +
+        'guide_next_step() now.';
     }
 
     // Also try sending immediately (may succeed if WebSocket is still up)
@@ -1054,104 +1094,167 @@
   });
 
   async function handlePointToElement(payload) {
-    return pointAndWaitForClick(payload.element_id, null);
+    try {
+      const selector = payload && payload.element_id;
+      if (!selector) {
+        return {
+          clicked: false,
+          error: 'element_id missing',
+          presentationInstructions:
+            'Mujhe pata nahi chala kis cheez par ishara karna hai. ' +
+            'User se poochhein woh kya karna chahte hain.',
+        };
+      }
+      // Hard 20 s cap: this tool can never hold the conversation hostage,
+      // even if the agent calls it directly outside the guided flow.
+      return await pointAndAwaitClick(selector, { timeoutMs: POINT_TIMEOUT_MS });
+    } catch (err) {
+      console.warn('[Maryam] point_to_element failed:', err.message);
+      return {
+        clicked: false,
+        error: err.message,
+        presentationInstructions:
+          'Screen par woh cheez nahi mili. User ko zubaani bataayein ke ' +
+          'kahan click karna hai.',
+      };
+    }
   }
 
-  // Shared point-and-wait engine: moves the pointer to the element,
-  // shows the Urdu prompt, and resolves only when the citizen clicks
-  // it themselves (or the operation is cancelled/superseded).
-  // `onClicked` (optional) runs synchronously inside the click handler,
-  // before resolution — used by guided flows to persist state before
-  // a navigation tears the page down.
   // Generation token: every new point operation invalidates all older
   // ones, including those still awaiting waitForElement — otherwise a
   // stale operation whose element appears late could steal
   // activePointCancel from the live one.
   let pointOpSeq = 0;
 
-  async function pointAndWaitForClick(selector, onClicked) {
+  // How long any single point-and-wait may hold a tool call open. Must
+  // stay comfortably under the remote tool timeout (30 s) so the agent
+  // always receives our result rather than a remote timeout error.
+  const POINT_TIMEOUT_MS = 20000;
+
+  // ── The ONE pointing engine ─────────────────────────────────────────
+  // Moves the pointer to the element, shows the Urdu prompt, and resolves
+  // on click, on timeout, or on cancellation. NEVER hangs.
+  //
+  // Returns one of:
+  //   { clicked: true,  element_id }
+  //   { clicked: false, timed_out: true, element_id }
+  //   { clicked: false, cancelled: true, element_id, reason }
+  //
+  // opts: { timeoutMs = POINT_TIMEOUT_MS (0 or less = no timeout),
+  //         onClicked = null }
+  //
+  // On timeout the promise resolves but the listeners stay attached and
+  // the dot stays on screen — a late click still runs onClicked and still
+  // sends its [CLICK] notification. Only a supersede, a DOM removal or
+  // the actual click tears the operation down.
+  async function pointAndAwaitClick(selector, opts) {
+    opts = opts || {};
+    const timeoutMs = opts.timeoutMs === undefined ? POINT_TIMEOUT_MS : opts.timeoutMs;
+    const onClicked = opts.onClicked || null;
+
     const myOp = ++pointOpSeq;
-    if (activePointCancel) activePointCancel('superseded by new point_to_element');
+    if (activePointCancel) activePointCancel('superseded by new point operation');
 
+    let el;
     try {
-      const el = await waitForElement(selector);
-      if (myOp !== pointOpSeq) {
-        return { clicked: false, cancelled: true, element_id: selector,
-                 reason: 'superseded while waiting for element' };
-      }
-
-      // Move the animated green pointer to the element
-      await movePointerTo(el);
-      triggerPulse();
-
-      // Show Urdu status
-      const labelMap = {};
-      const pageConfig = SITE_CONFIG[getCurrentPageKey()];
-      if (pageConfig && pageConfig.elements) {
-        pageConfig.elements.forEach((e) => {
-          labelMap[e.element_id] = e.label_ur || e.label_en || e.label;
-        });
-      }
-      const label = labelMap[selector] || selector;
-      setStatus('یہاں کلک کریں: ' + label);
-
-      // Wait for the CITIZEN to click the element (not auto-click).
-      // Maryam POINTS and WAITS — the citizen does the clicking.
-      return await new Promise((resolve) => {
-        let removalWatcher = null;
-
-        function cleanup() {
-          window.removeEventListener('scroll', reposition, true);
-          window.removeEventListener('resize', reposition);
-          el.removeEventListener('click', onClick, true);
-          if (removalWatcher) removalWatcher.disconnect();
-          if (activePointCancel === cancel) activePointCancel = null;
-          hidePointer();
-          setStatus('', false);
-        }
-
-        function cancel(reason) {
-          cleanup();
-          resolve({ clicked: false, cancelled: true, element_id: selector, reason: reason });
-        }
-        activePointCancel = cancel;
-
-        function reposition() {
-          const rect = el.getBoundingClientRect();
-          const pointer = document.getElementById('maryam-pointer');
-          if (!pointer) return;
-          pointer.style.left = (rect.left + rect.width / 2 - 22) + 'px';
-          pointer.style.top = (rect.top + rect.height / 2 - 22) + 'px';
-        }
-
-        window.addEventListener('scroll', reposition, true);
-        window.addEventListener('resize', reposition);
-
-        // If the target is removed from the DOM (dynamic panels), resolve
-        // with an error instead of waiting forever.
-        removalWatcher = new MutationObserver(() => {
-          if (!document.body.contains(el)) {
-            cancel('element removed from page');
-          }
-        });
-        removalWatcher.observe(document.body, { childList: true, subtree: true });
-
-        function onClick() {
-          cleanup();
-          try {
-            if (onClicked) onClicked();
-          } catch (e) {
-            console.error('[Maryam] onClicked callback failed:', e);
-          }
-          resolve({ clicked: true, element_id: selector });
-        }
-
-        el.addEventListener('click', onClick, true);
-      });
+      el = await waitForElement(selector);
     } catch (err) {
-      console.warn('[Maryam] point_to_element failed:', selector, err.message);
-      return { clicked: false, error: err.message };
+      console.warn('[Maryam] point target never appeared:', selector, err.message);
+      return { clicked: false, cancelled: true, element_id: selector, reason: err.message };
     }
+    if (myOp !== pointOpSeq) {
+      return { clicked: false, cancelled: true, element_id: selector,
+               reason: 'superseded while waiting for element' };
+    }
+
+    // Move the animated green pointer to the element
+    await movePointerTo(el);
+    triggerPulse();
+
+    // Show Urdu status
+    const labelMap = {};
+    const pageConfig = SITE_CONFIG[getCurrentPageKey()];
+    if (pageConfig && pageConfig.elements) {
+      pageConfig.elements.forEach((e) => {
+        labelMap[e.element_id] = e.label_ur || e.label_en || e.label;
+      });
+    }
+    setStatus('یہاں کلک کریں: ' + (labelMap[selector] || selector));
+
+    // Wait for the CITIZEN to click the element (never auto-click).
+    return new Promise((resolve) => {
+      let removalWatcher = null;
+      let timer = null;
+      let settled = false;   // promise already resolved
+      let disposed = false;  // listeners already removed
+
+      function dispose() {
+        if (disposed) return;
+        disposed = true;
+        if (timer) clearTimeout(timer);
+        window.removeEventListener('scroll', reposition, true);
+        window.removeEventListener('resize', reposition);
+        el.removeEventListener('click', onClick, true);
+        if (removalWatcher) removalWatcher.disconnect();
+        if (activePointCancel === cancel) activePointCancel = null;
+      }
+
+      function settle(result) {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      }
+
+      function cancel(reason) {
+        dispose();
+        hidePointer();
+        setStatus('', false);
+        settle({ clicked: false, cancelled: true, element_id: selector, reason: reason });
+      }
+      activePointCancel = cancel;
+
+      function reposition() {
+        const rect = el.getBoundingClientRect();
+        const pointer = document.getElementById('maryam-pointer');
+        if (!pointer) return;
+        pointer.style.left = (rect.left + rect.width / 2 - 22) + 'px';
+        pointer.style.top = (rect.top + rect.height / 2 - 22) + 'px';
+      }
+
+      window.addEventListener('scroll', reposition, true);
+      window.addEventListener('resize', reposition);
+
+      // If the target is removed from the DOM (dynamic panels), resolve
+      // instead of waiting forever.
+      removalWatcher = new MutationObserver(() => {
+        if (!document.body.contains(el)) cancel('element removed from page');
+      });
+      removalWatcher.observe(document.body, { childList: true, subtree: true });
+
+      function onClick() {
+        dispose();
+        hidePointer();
+        setStatus('', false);
+        // Runs SYNCHRONOUSLY, before resolve: guided-flow state must be
+        // persisted before a navigation tears this page down.
+        try {
+          if (onClicked) onClicked();
+        } catch (e) {
+          console.error('[Maryam] onClicked callback failed:', e);
+        }
+        settle({ clicked: true, element_id: selector });
+      }
+
+      el.addEventListener('click', onClick, true);
+
+      if (timeoutMs > 0) {
+        timer = setTimeout(function () {
+          // Deliberately NOT disposing — a late click must still count.
+          console.log('[Maryam] Point timed out (still listening):', selector);
+          settle({ clicked: false, timed_out: true, element_id: selector });
+        }, timeoutMs);
+      }
+    });
   }
 
   async function handleFillField(payload) {
