@@ -149,10 +149,13 @@
       formType: 'renewal-license',
       instruction: 'Use fill_field() for each field, in order. ' +
                    'Always confirm value verbally before filling. ' +
-                   'After all 5 fields: point_to_element to the captcha ' +
-                   '(.math-captcha-wrapper) — the citizen answers it ' +
-                   'themselves — then point_to_element to the submit ' +
-                   'button (#btnSubmitApplication) and wait for their click.',
+                   'After all 5 fields are filled, call guide_next_step() — ' +
+                   'it highlights the captcha itself (the citizen types the ' +
+                   'answer, you NEVER say it aloud) and then the submit ' +
+                   'button. Keep calling guide_next_step() and speaking its ' +
+                   'presentationInstructions until the flow completes. ' +
+                   'Do NOT call the standalone point-and-wait tool on this ' +
+                   'page — the guided flow owns the captcha and submit steps.',
       fields: [
         {
           order:      1,
