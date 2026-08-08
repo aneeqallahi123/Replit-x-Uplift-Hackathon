@@ -361,6 +361,12 @@ async function runDemoFlow() {
 let agentRunning = false;
 
 document.getElementById('mic-btn').addEventListener('click', async () => {
+  // If we are not on the services page, send the user there to run the demo
+  if (!document.querySelector('[data-service-key="renewal_driving_license"]')) {
+    window.location.href = 'services.html';
+    return;
+  }
+
   if (agentRunning) return;
   agentRunning = true;
 

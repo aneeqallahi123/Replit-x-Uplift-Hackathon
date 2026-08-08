@@ -65,21 +65,47 @@
 
 <body class="home_3_body">
 
-    <!-- Minimal site header — links back to the homepage -->
-    <nav class="navbar navbar-expand-lg fixed-top home_3_header" style="z-index:9000;">
+    <!-- Full Dastak navbar (matches apply.html) -->
+    <nav class="navbar navbar-expand-lg fixed-top home_3_header">
         <div class="container-fluid">
             <a class="navbar-brand navbrand_home_3" href="/">
                 <img src="assets/images/logo.svg" alt="Dastak Logo">
             </a>
-            <div class="d-flex align-items-center gap-3 ms-auto">
-                <a href="/" class="btn custom-btn-outline" style="font-size:13px;padding:6px 18px;">
-                    ← Home
-                </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#dastakNavbarSvc" aria-controls="dastakNavbarSvc">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="offcanvas-lg offcanvas-start menu_offcanvas" tabindex="-1" id="dastakNavbarSvc" aria-labelledby="dastakNavbarSvcLabel">
+                <div class="offcanvas-header border-bottom">
+                    <h5 class="offcanvas-title" id="dastakNavbarSvcLabel"><img src="assets/images/logo_new.svg" alt="Dastak Logo"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#dastakNavbarSvc" aria-label="Close"></button>
+                </div>
+                <div class="offcanvas-body p-4 p-lg-0">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0 custom-nav-links gap-lg-2">
+                        <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/#about">About</a></li>
+                        <li class="nav-item"><a class="nav-link active" href="services.html">Services</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/#partners">Our Partners</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/#news">News</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/#contact">Contact</a></li>
+                    </ul>
+                    <div class="d-flex align-items-center flex-column flex-lg-row gap-3 mt-3 mt-lg-0 header-controls">
+                        <div class="custom-lang-toggle d-flex align-items-center gap-2 me-lg-2 order-2 order-lg-1">
+                            <a href="#"><span class="lang-text active">Eng</span></a>
+                            <div class="lang-switch-track" style="cursor:pointer;"><div class="lang-switch-knob"></div></div>
+                            <a href="#"><span class="lang-text urdu-font">اردو</span></a>
+                        </div>
+                        <div class="d-flex flex-column flex-md-row align-items-center gap-2 order-1 order-lg-2">
+                            <a href="/#careers" class="btn custom-btn-outline">Become a Facilitator</a>
+                            <a href="#" class="btn custom-btn-solid">Register as Applicant</a>
+                            <a href="#" class="btn custom-btn-yellow">Login</a>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </nav>
 
-    <section class="section-padding bg-white min-vh-100 pt-5" style="margin-top:64px;">
+    <section class="section-padding bg-white min-vh-100 pt-5">
         <div class="container">
 
             <div class="demo-banner">
