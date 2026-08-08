@@ -1,0 +1,1 @@
+- [Maryam agent integration](maryam-agent-integration.md) — single agent file, swapped apply-mode class names, RPC arg unwrapping, cancellable pointer ops, divergent GitHub origin.
