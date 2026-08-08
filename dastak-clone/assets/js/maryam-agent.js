@@ -507,13 +507,18 @@
     el.style.display = show === false ? 'none' : 'block';
   }
 
+  // Deliberately NOT awaited by the pointing paths — the dot animates
+  // while Maryam is already talking, which is the effect we want. The
+  // internal delays only exist to let the smooth scroll settle before we
+  // read the element's rect; the scroll/resize repositioning in
+  // pointAndAwaitClick corrects anything that lands late.
   async function movePointerTo(el) {
     if (!el) return;
     const pointer = document.getElementById('maryam-pointer');
     if (!pointer) return;
 
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    await delay(500);
+    await delay(150);
 
     const rect = el.getBoundingClientRect();
     const x = rect.left + rect.width / 2 - 22;
@@ -522,7 +527,7 @@
     pointer.style.left = x + 'px';
     pointer.style.top = y + 'px';
     pointer.classList.add('active');
-    await delay(500);
+    await delay(150);
   }
 
   function triggerPulse() {
@@ -542,7 +547,7 @@
   // SECTION 5 — waitForElement utility
   // -------------------------------------------------------------------
   function waitForElement(selector, timeoutMs) {
-    timeoutMs = timeoutMs || 8000;
+    timeoutMs = timeoutMs || 3000;
     return new Promise((resolve, reject) => {
       const existing = document.querySelector(selector);
       if (existing) return resolve(existing);
@@ -839,7 +844,7 @@
         };
       }
 
-      await movePointerTo(wrapper);
+      movePointerTo(wrapper);   // not awaited — dot animates while Maryam talks
       triggerPulse();
 
       // Wait (up to ~30 s) for the answer to become CORRECT. Resolves on
@@ -1330,8 +1335,9 @@
                reason: 'superseded while waiting for element' };
     }
 
-    // Move the animated green pointer to the element
-    await movePointerTo(el);
+    // Move the animated green pointer to the element.
+    // Not awaited: the dot animates while Maryam is already talking.
+    movePointerTo(el);
     triggerPulse();
 
     // Show Urdu status
@@ -1420,6 +1426,20 @@
     });
   }
 
+  // Per-character typewriter pace. Deliberately kept (it is a demo
+  // feature) but fast enough that a 13-digit CNIC lands in ~0.3 s.
+  const TYPEWRITER_DELAY_MS = 25;
+
+  // The green field highlight is purely cosmetic, so clear it on a timer
+  // instead of awaiting it — fill_field must not hold the agent's turn
+  // open for an animation.
+  function clearFieldHighlightSoon(el) {
+    setTimeout(function () {
+      el.classList.remove('field-highlight');
+      hidePointer();
+    }, 300);
+  }
+
   async function handleFillField(payload) {
     // Destructured INSIDE the try: a malformed payload must produce a
     // structured result the agent can speak, not a rejected RPC.
@@ -1439,8 +1459,8 @@
 
       const el = await waitForElement('#' + fieldId);
 
-      // Move pointer to the field
-      await movePointerTo(el);
+      // Move pointer to the field (not awaited — see movePointerTo)
+      movePointerTo(el);
       triggerPulse();
 
       // Highlight the field
@@ -1471,9 +1491,7 @@
         el.value = match.value;
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
-        await delay(300);
-        el.classList.remove('field-highlight');
-        hidePointer();
+        clearFieldHighlightSoon(el);
         return { field_name: fieldId, value: match.textContent.trim(), filled: true };
       }
 
@@ -1484,9 +1502,7 @@
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
         const ok = el.value === String(value);
-        await delay(300);
-        el.classList.remove('field-highlight');
-        hidePointer();
+        clearFieldHighlightSoon(el);
         return ok
           ? { field_name: fieldId, value: value, filled: true }
           : { filled: false, field_name: fieldId, error: 'Invalid date value "' + value + '" — use YYYY-MM-DD.' };
@@ -1500,13 +1516,11 @@
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.dispatchEvent(new Event('change', { bubbles: true }));
         el.dispatchEvent(new KeyboardEvent('keyup', { bubbles: true }));
-        await delay(55);
+        await delay(TYPEWRITER_DELAY_MS);
       }
       el.dispatchEvent(new Event('blur', { bubbles: true }));
 
-      await delay(300);
-      el.classList.remove('field-highlight');
-      hidePointer();
+      clearFieldHighlightSoon(el);
 
       return { field_name: fieldId, value: value, filled: true };
     } catch (err) {
