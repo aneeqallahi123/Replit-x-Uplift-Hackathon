@@ -269,7 +269,10 @@
       selector: function () { return '.hero_actions .btn_apply_service_hero'; },
       fallbackSelector: 'a[href="services.html"]',
       navigates: true,
-      say_after: 'Bohat acha! Ab hum services page par ja rahe hain.',
+      // say_now: spoken as soon as the pointer appears (agent is free to talk)
+      say_now: 'Theek hai! Pehle main aapko Services page par le chalti hoon. ' +
+               'Screen par ek green button highlight ho raha hai — uss par click karein.',
+      say_after: 'Bohat acha! Services page khul raha hai — ek second mein wahan pohonch jaayenge.',
     },
     {
       id: 'select_card',
@@ -278,7 +281,9 @@
         return '[data-service-key="' + flow.serviceKey + '"]';
       },
       navigates: false,
-      say_after: 'Shabash! Service khul gayi hai. Ab apply karne ka tareeqa chunna hai.',
+      say_now: 'Ab main "Renewal of Regular License" card highlight kar rahi hoon. ' +
+               'Uss highlighted card par click karein.',
+      say_after: 'Shabash! Service khul gayi hai. Ab apply karne ka tareeqa chunein.',
     },
     {
       id: 'select_mode',
@@ -287,6 +292,7 @@
         return flow.mode === 'doorstep' ? '.apply_self' : '.apply_online';
       },
       navigates: false,
+      say_now: 'Bilkul. Main aapka pasandida tareeqa highlight kar rahi hoon — uss par click karein.',
       say_after: 'Theek hai, tareeqa select ho gaya. Ab Apply button dabana hai.',
     },
     {
@@ -294,7 +300,8 @@
       page: 'services',
       selector: function () { return '.btn-apply-service'; },
       navigates: true,
-      say_after: 'Application form khul raha hai.',
+      say_now: 'Apply button highlight ho gaya hai — uss par click karein taake application form khule.',
+      say_after: 'Application form khul raha hai — ek second mein wahan pohonch jaayenge.',
     },
     {
       id: 'form',
@@ -764,42 +771,66 @@
       };
     }
 
-    // ── Captcha step: advance only on a CORRECT answer ────────
+    // ── Captcha step: NON-BLOCKING — advance only when answer is correct ──
     if (step.captcha) {
       const captcha = getCaptchaState();
       if (captcha.correct) {
+        // Already answered correctly — advance immediately.
         flow.stepIndex += 1;
         saveFlow(flow);
         return executeCurrentFlowStep(isRetryAfterMismatch);
       }
-      // Not answered / wrong — point at the captcha, but do NOT
-      // advance on the click; the citizen must type the answer.
-      const pointResult = await pointAndWaitForClick('.math-captcha-wrapper', null);
-      const after = getCaptchaState();
-      if (after.correct) {
-        flow.stepIndex += 1;
-        saveFlow(flow);
-        return {
-          active: true,
-          step: 'captcha',
-          captcha_correct: true,
-          presentationInstructions:
-            'Captcha sahi hal ho gaya hai. Ab guide_next_step call karein ' +
-            'taake submit button dikhaya ja sake.',
+
+      // Point at the captcha area and return immediately.
+      // The click listener does NOT advance stepIndex — the agent must
+      // call guide_next_step() again to re-check the answer.
+      try {
+        const el = await waitForElement('.math-captcha-wrapper', 5000);
+        await movePointerTo(el);
+        triggerPulse();
+
+        const myOp = ++pointOpSeq;
+        if (activePointCancel) activePointCancel('superseded by captcha step');
+
+        const onClickOnce = function () {
+          el.removeEventListener('click', onClickOnce, true);
+          if (myOp !== pointOpSeq) return;
+          activePointCancel = null;
+          // Do NOT advance stepIndex — captcha may still be wrong.
+          // Just notify the agent to re-check.
+          const state = getCaptchaState();
+          if (!maryamRoom || !maryamConnected) return;
+          const msg =
+            '[CLICK: captcha] (system message) Citizen interacted with the captcha. ' +
+            'Captcha is ' + (state.correct ? 'CORRECT' : 'still wrong or empty') + '. ' +
+            'Call guide_next_step() to check the answer and proceed.';
+          maryamRoom.localParticipant
+            .sendText(msg, { topic: 'lk.chat' })
+            .catch(function () {});
         };
+        el.addEventListener('click', onClickOnce, true);
+        activePointCancel = function (reason) {
+          el.removeEventListener('click', onClickOnce, true);
+          activePointCancel = null;
+          console.log('[Maryam] Captcha listener removed:', reason);
+        };
+      } catch (err) {
+        console.error('[Maryam] Captcha element not found:', err.message);
       }
+
       return {
         active: true,
         step: 'captcha',
         captcha_correct: false,
-        captcha_answered: after.answered,
-        captcha_question: after.question,
-        pointed: !!pointResult.clicked,
+        captcha_answered: captcha.answered,
+        captcha_question: captcha.question,
+        pointed: true,
+        waiting_for_click: true,
         presentationInstructions:
-          'User ko batayein ke screen par security sawal "' + after.question +
-          '" ka jawab khud type karna hai (aap iska jawab na batayein). ' +
-          'Jab user keh de ke jawab likh diya hai, guide_next_step dobara ' +
-          'call karein — main check kar ke aage barhungi.',
+          'Screen par captcha highlight ho gaya hai. User ko batayein ke ' +
+          '"' + (captcha.question || 'security sawal') + '" ka jawab khud type karein — ' +
+          'aap jawab mat batayein. Jab woh type kar lein aur [CLICK: captcha] ' +
+          'message aaye, guide_next_step call karein taake main check kar sakoon.',
       };
     }
 
@@ -856,67 +887,119 @@
       };
     }
 
-    // ── Pointing step: point and WAIT for the citizen's click ──
+    // ── Pointing step: NON-BLOCKING — point and return immediately ──
+    //
+    // The RPC returns as soon as the pointer is positioned. A one-time
+    // click listener fires when the citizen clicks:
+    //  • persists flow state (before any navigation tears the page down)
+    //  • sends a [CLICK] text message so the agent knows what happened
+    //    and what to do next WITHOUT needing the RPC to still be alive.
     let selector = step.selector(flow);
     if (!document.querySelector(selector) && step.fallbackSelector) {
       selector = step.fallbackSelector;
     }
 
-    const result = await pointAndWaitForClick(selector, function onClicked() {
-      // Advance the flow BEFORE navigation can tear the page down.
-      flow.stepIndex += 1;
-      saveFlow(flow);
-      if (step.navigates) {
-        const saved = loadSavedSession();
-        if (saved) saveSession({ ...saved, agentNavigated: true });
-      }
-    });
+    try {
+      const el = await waitForElement(selector, 8000);
+      await movePointerTo(el);
+      triggerPulse();
 
-    if (!result.clicked) {
+      const myOp = ++pointOpSeq;
+      if (activePointCancel) activePointCancel('superseded by guided step');
+
+      // One-time click listener — fires when citizen clicks the element.
+      const onClickOnce = function () {
+        el.removeEventListener('click', onClickOnce, true);
+        if (myOp !== pointOpSeq) return; // operation superseded
+        activePointCancel = null;
+        hidePointer();
+
+        // Persist state BEFORE navigation can unload the page.
+        flow.stepIndex += 1;
+        saveFlow(flow);
+        if (step.navigates) {
+          const saved = loadSavedSession();
+          if (saved) saveSession({ ...saved, agentNavigated: true });
+        }
+
+        // Send a [CLICK] notification — fire-and-forget.
+        // This reaches the agent even if the connection drops a moment
+        // later during navigation, because it's in flight before unload.
+        sendClickNotification(step, flow);
+      };
+      el.addEventListener('click', onClickOnce, true);
+
+      // Allow the next point call (or page unload) to clean up the listener.
+      activePointCancel = function (reason) {
+        el.removeEventListener('click', onClickOnce, true);
+        activePointCancel = null;
+        console.log('[Maryam] Click listener removed:', reason);
+      };
+
+    } catch (err) {
+      console.error('[Maryam] Could not point at', selector, err.message);
       return {
         active: true,
         step: step.id,
-        clicked: false,
-        reason: result.reason || result.error,
+        pointed: false,
+        error: err.message,
         presentationInstructions:
-          'User ne abhi click nahi kiya (' + (result.reason || result.error || 'unknown') +
-          '). Unhe dobara batayein ke highlighted button par click karein, ' +
-          'phir guide_next_step call karein.',
+          'Element screen par nahi mila: ' + selector + '. ' +
+          'User ko manually navigate karne mein madad karein, ' +
+          'ya guide_next_step dobara call karein.',
       };
-    }
-
-    if (step.navigates) {
-      return {
-        active: true,
-        step: step.id,
-        clicked: true,
-        navigating: true,
-        presentationInstructions:
-          (step.say_after || 'Acha!') +
-          ' Naya page load ho raha hai — jab [PAGE UPDATE] message aaye, ' +
-          'foran guide_next_step call karein.',
-      };
-    }
-
-    const nextStep = FLOW_STEPS[flow.stepIndex];
-
-    // After the submit click, apply.js synchronously validates and
-    // shows either the success view or errors — verify immediately in
-    // the same RPC instead of relying on an extra tool call.
-    if (nextStep && nextStep.finish) {
-      await delay(600);
-      return executeCurrentFlowStep(isRetryAfterMismatch);
     }
 
     return {
       active: true,
       step: step.id,
-      clicked: true,
-      next_step: nextStep ? nextStep.id : 'done',
+      pointed: true,
+      waiting_for_click: true,
       presentationInstructions:
-        (step.say_after || 'Acha!') +
-        ' Ab foran guide_next_step call karein taake agla button dikhaya ja sake.',
+        (step.say_now ||
+          'Screen par ek green button highlight ho gaya hai. ' +
+          'User ko batayein ke woh highlighted element par click karein.') +
+        ' Jab woh click karein ge, aapko "[CLICK: ' + step.id + ']" ' +
+        'message aayega — uss ke baad agle instructions follow karein.',
     };
+  }
+
+  // Fire-and-forget: sends a [CLICK] message to the agent so it knows
+  // what happened without relying on the RPC still being alive.
+  // For navigating steps the message tells the agent to wait for
+  // [PAGE UPDATE]; for non-navigating steps it tells it to call
+  // guide_next_step immediately.
+  function sendClickNotification(step, flow) {
+    if (!maryamRoom || !maryamConnected) return;
+    const nextStep = FLOW_STEPS[flow.stepIndex];
+    let msg =
+      '[CLICK: ' + step.id + '] (system message — citizen clicked the highlighted element.) ' +
+      (step.say_after ? 'Say: "' + step.say_after + '". ' : '');
+
+    if (step.navigates) {
+      msg +=
+        'The page is now navigating to the next screen. ' +
+        'Do NOT call any tool right now — just speak the above line. ' +
+        'Wait for the next [PAGE UPDATE] message, then IMMEDIATELY ' +
+        'call guide_next_step() and tell the citizen (in Urdu) what to do next.';
+    } else {
+      msg +=
+        'The citizen is still on the same page. ' +
+        'Next step is "' + (nextStep ? nextStep.id : 'done') + '". ' +
+        'Speak the line above, then call guide_next_step() immediately.';
+    }
+
+    maryamRoom.localParticipant
+      .sendText(msg, { topic: 'lk.chat' })
+      .catch(function (err) {
+        // Use publishData as fallback — [PAGE UPDATE] will cover this anyway.
+        console.warn('[Maryam] sendClickNotification text failed, trying data:', err);
+        maryamRoom.localParticipant
+          .publishData(new TextEncoder().encode(msg), { reliable: true, topic: 'lk.chat' })
+          .catch(function (e2) {
+            console.warn('[Maryam] sendClickNotification data also failed:', e2);
+          });
+      });
   }
 
   async function handleGuideNextStep() {
@@ -1200,17 +1283,19 @@
       'Live context: ' + JSON.stringify(live) + '. ';
 
     if (live.guided_flow) {
-      text +=
+      // Lead with the action so the agent acts first, speaks second.
+      text =
+        '[PAGE UPDATE — ACTION REQUIRED] ' +
+        'IMMEDIATELY call guide_next_step() now — do not wait, do not speak first. ' +
         'A guided flow for "' + live.guided_flow.service_key +
         '" is ACTIVE at step "' + live.guided_flow.current_step +
-        '" (' + live.guided_flow.step_number + '/' +
-        live.guided_flow.total_steps + '). ' +
-        'Immediately call the guide_next_step tool to continue guiding ' +
-        'the citizen, and tell them (in Urdu) what to do next.';
+        '" (' + live.guided_flow.step_number + '/' + live.guided_flow.total_steps + '). ' +
+        'Citizen is on the "' + live.page + '" page (' + reason + '). ' +
+        'Context: ' + JSON.stringify(live);
     } else {
       text +=
-        'No guided flow is active. If the citizen asks for a service, ' +
-        'call start_service.';
+        'No guided flow is active. Greet the citizen and ask how you can help. ' +
+        'If they want a service, call start_service.';
     }
 
     try {
@@ -1546,7 +1631,20 @@
         try {
           await connectAndRegisterTools();
         } catch (err) {
-          console.error('[Maryam] Auto-reconnect failed:', err);
+          console.error('[Maryam] Auto-reconnect with saved session failed:', err);
+          // Saved session token may have expired — clear it and try fresh.
+          sessionStorage.removeItem(SESSION_STORAGE_KEY);
+          try {
+            console.log('[Maryam] Retrying with a fresh session...');
+            await connectAndRegisterTools();
+          } catch (err2) {
+            console.error('[Maryam] Fresh-session auto-reconnect also failed:', err2);
+            if (micBtn) {
+              micBtn.textContent = '⚠️';
+              micBtn.classList.remove('connecting');
+            }
+            setStatus('کنکشن ناکام — مائیک بٹن دبائیں', true);
+          }
         }
       }, 800);
     }

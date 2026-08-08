@@ -21,72 +21,72 @@ if (!API_KEY) {
 
 const GUIDED_NAV_SECTION = `## Phase 0–2: Guided Navigation (start_service + guide_next_step)
 
-Navigation to the application form is now fully guided, one click at a
-time, by two tools. You never click anything for the user and you never
-use \`navigate_to_page\` while guiding — the user makes every click
-themselves, on the element being pointed at.
+Navigation to the application form is fully guided, one click at a
+time. You never click anything for the user; they make every click
+themselves on the highlighted element.
 
-How it works:
+### How the tools work (IMPORTANT — read carefully)
 
-1. When the user wants license renewal, briefly tell them you will
-   guide them step by step, then call
-   \`start_service("renewal_driving_license", mode)\`. If the user has
-   already told you how they want to apply, pass mode "online" (Self
-   Service) or "doorstep" (Doorstep Service). If they haven't, ask the
-   one-line question first (see the mode meanings below), then call the
-   tool with their choice.
-2. The tool points a red dot at exactly ONE element on screen and
-   WAITS until the user really clicks it. When it resolves, the result
-   tells you what happened and what to do next — follow its
-   presentationInstructions.
-3. Whenever the result (or a [PAGE UPDATE] message) tells you to, call
-   \`guide_next_step()\` — it points at the next element and waits
-   again. Keep repeating until the flow reaches the application form.
+\`start_service\` and \`guide_next_step\` are NON-BLOCKING. They
+point a green dot at exactly one element and return IMMEDIATELY —
+they do NOT wait for the user's click. This means:
 
-Page changes: when the user's click causes a new page to load, you will
-receive a message starting with "[PAGE UPDATE" — this is a system
-message from the website, NOT the user speaking. Do not read it aloud.
-It tells you which page the user is now on and whether a guided flow is
-active. If a flow is active, immediately call \`guide_next_step()\` and
-then tell the user (in Urdu) what to do next.
+1. The tool returns with a \`presentationInstructions\` field.
+   **Speak that text right now**, while the pointer is on screen.
+2. Stay quiet and wait. Do not call any other tool.
+3. You will receive one of two system messages from the website:
+   - **\`[CLICK: stepId]\`** — the citizen clicked the element.
+     Follow the instructions in that message (speak + call
+     \`guide_next_step()\` or wait for \`[PAGE UPDATE]\`).
+   - **\`[PAGE UPDATE — ACTION REQUIRED]\`** — a new page has loaded
+     after a navigation click. IMMEDIATELY call \`guide_next_step()\`
+     (no waiting, no preamble) and then tell the citizen what to do.
 
-Apply-mode meanings (asked before or during the flow):
-- Self Service (mode "online") — apply online, collect final documents
-  from the office in person
-- Doorstep Service (mode "doorstep") — a facilitator collects and
-  delivers documents at the user's home
+### Starting the flow
 
-If things go wrong:
-- If the user clicks somewhere else or navigates manually, the next
-  \`guide_next_step()\` call detects the mismatch, re-anchors to the
-  page the user is actually on, and tells you how to continue. Stay
-  calm, briefly re-orient the user, and continue.
-- If the user hasn't clicked yet and the tool resolves without a click,
-  gently remind them to click the highlighted element, then call
+When the user wants license renewal:
+1. Ask (if not already known): Self Service or Doorstep Service?
+2. Call \`start_service("renewal_driving_license", mode)\` where
+   mode is "online" (Self Service) or "doorstep" (Doorstep).
+3. Speak the \`presentationInstructions\` from the tool result.
+4. Wait for a \`[CLICK]\` or \`[PAGE UPDATE]\` message.
+
+### Apply-mode meanings
+- Self Service (mode "online") — apply online; collect final documents
+  from the office in person.
+- Doorstep Service (mode "doorstep") — a facilitator visits the
+  user's home to collect and deliver documents.
+
+### System messages (not from the user — never read them aloud)
+- \`[CLICK: <stepId>]\` — citizen clicked the highlighted button.
+  Contains a "Say: ..." line — speak it, then follow the rest.
+- \`[PAGE UPDATE — ACTION REQUIRED]\` — new page loaded. Call
+  \`guide_next_step()\` immediately without any preamble.
+
+### If things go wrong
+- User navigated manually or clicked the wrong thing: the next
+  \`guide_next_step()\` call re-anchors and recovers automatically.
+- User hasn't clicked yet (tool resolved without \`[CLICK]\` message):
+  gently remind them to tap the highlighted element, then call
   \`guide_next_step()\` again.
 
 `;
 
 const PHASE4_OLD = `1. Tell the user there is one last quick step before submitting — a
    simple security question they need to answer themselves on screen
-2. Call \`point_to_element\` on the captcha element (\`.math-captcha-wrapper\`)
-3. Wait for that tool to resolve (meaning the user has completed it)
-   before proceeding to Phase 5`;
-
-const PHASE4_NEW = `1. Tell the user there is one last quick step before submitting — a
-   simple security question they need to answer themselves on screen
 2. Call \`guide_next_step()\` — it points at the captcha and waits for
    the user to complete it
 3. Wait for that tool to resolve before proceeding to Phase 5`;
 
-const PHASE5_OLD = `3. Only after explicit confirmation, call \`point_to_element\` on the
-   submit button (\`#btnSubmitApplication\`) and wait for the user to
-   click it.
-4. After submission, confirm with the user that a success screen has
-   appeared and tell them clearly and warmly that their renewal
-   request has been submitted successfully.`;
+const PHASE4_NEW = `1. Tell the user there is one last quick step — a simple security
+   question they need to answer themselves on screen
+2. Call \`guide_next_step()\` — it points at the captcha and returns
+   immediately. Speak whatever \`presentationInstructions\` says.
+3. Wait for a \`[CLICK: captcha]\` message confirming the citizen
+   interacted with the captcha, then call \`guide_next_step()\` to
+   check whether the answer is correct before proceeding to Phase 5`;
 
-const PHASE5_NEW = `3. Only after explicit confirmation, call \`guide_next_step()\` — it
+const PHASE5_OLD = `3. Only after explicit confirmation, call \`guide_next_step()\` — it
    points at the submit button and waits for the user to click it.
 4. After the click, call \`guide_next_step()\` one final time — it
    verifies the success screen appeared. If it reports success, tell
@@ -95,13 +95,18 @@ const PHASE5_NEW = `3. Only after explicit confirmation, call \`guide_next_step(
    validation errors instead, explain them and help the user fix the
    affected fields before trying again.`;
 
-const NAVTOOL_DOC_OLD = `- **\`navigate_to_page(page)\`** — Directly navigates to a named page
-  (e.g. "services"). Use this for the homepage-to-services transition,
-  since the real link there isn't wired up yet. Most other transitions
-  in this flow happen naturally as a result of the user clicking
-  something via \`point_to_element\`.`;
+const PHASE5_NEW = `3. Only after explicit confirmation, call \`guide_next_step()\` — it
+   points at the submit button and returns immediately. Speak
+   \`presentationInstructions\`, then wait for a \`[CLICK: submit]\`
+   message confirming the click.
+4. When \`[CLICK: submit]\` arrives, call \`guide_next_step()\` — it
+   verifies the success screen. If it reports success, tell the user
+   warmly that their renewal request has been submitted and read out
+   the Application ID shown on screen digit by digit. If it reports
+   validation errors, explain them and help fix the fields before
+   trying again.`;
 
-const NAVTOOL_DOC_NEW = `- **\`start_service(service_key, mode)\`** — Begins the guided flow for
+const NAVTOOL_DOC_OLD = `- **\`start_service(service_key, mode)\`** — Begins the guided flow for
   a service. Points at the first element the user must click and waits
   for their real click. Use "renewal_driving_license" as service_key.
   mode is "online" (Self Service) or "doorstep" (Doorstep Service).
@@ -110,6 +115,22 @@ const NAVTOOL_DOC_NEW = `- **\`start_service(service_key, mode)\`** — Begins t
   next element and waits for the user's click. Call it whenever a tool
   result or a [PAGE UPDATE] message tells you to, and to verify final
   submission. Its result always says what to do next.
+
+- **\`navigate_to_page(page)\`** — Directly navigates to a named page.
+  AVOID during a guided flow — the user must click everything
+  themselves. Only use it if the user explicitly asks to jump
+  somewhere outside the guided flow.`;
+
+const NAVTOOL_DOC_NEW = `- **\`start_service(service_key, mode)\`** — Begins the guided flow.
+  Returns IMMEDIATELY after pointing (non-blocking). Speak the
+  \`presentationInstructions\` field right away, then wait for a
+  \`[CLICK]\` or \`[PAGE UPDATE]\` system message. Never call another
+  tool until one of those messages arrives.
+
+- **\`guide_next_step()\`** — Advances the guided flow to the next
+  step. Also returns immediately after pointing. Speak
+  \`presentationInstructions\`, then wait. On \`[PAGE UPDATE — ACTION
+  REQUIRED]\`, call this tool FIRST before speaking anything.
 
 - **\`navigate_to_page(page)\`** — Directly navigates to a named page.
   AVOID during a guided flow — the user must click everything
@@ -203,15 +224,29 @@ async function api(method, path, body) {
 
   // ── Instructions ──────────────────────────────────────────
   let instr = config.agent.instructions;
-  const phase0Idx = instr.indexOf('## Phase 0: Homepage Orientation');
   const phase3Idx = instr.indexOf('## Phase 3: Filling the Application Form');
-  if (phase0Idx !== -1 && phase3Idx !== -1) {
-    instr = instr.slice(0, phase0Idx) + GUIDED_NAV_SECTION + instr.slice(phase3Idx);
-    console.log('  [ok]   replaced Phase 0-2 with guided navigation section');
-  } else if (instr.includes('Guided Navigation (start_service')) {
-    console.log('  [skip] guided navigation section already applied');
+  // The guided nav section replaces everything between the opening
+  // and Phase 3, regardless of whether it was applied before.
+  // Anchors tried in priority order:
+  //  1. Original "## Phase 0:" marker (first run)
+  //  2. Existing "## Phase 0–2:" guided nav header (subsequent runs — old blocking version)
+  //  3. Existing non-blocking header (already up-to-date — skip)
+  const oldStart1 = instr.indexOf('## Phase 0: Homepage Orientation');
+  const oldStart2 = instr.indexOf('## Phase 0\u20132: Guided Navigation (start_service');
+  const isAlreadyNew = instr.includes('NON-BLOCKING. They') &&
+                       instr.includes('[CLICK: stepId]');
+
+  if (isAlreadyNew) {
+    console.log('  [skip] guided navigation section already up-to-date (non-blocking)');
+  } else if (phase3Idx !== -1 && (oldStart1 !== -1 || oldStart2 !== -1)) {
+    const cutFrom = oldStart1 !== -1 ? oldStart1 : oldStart2;
+    instr = instr.slice(0, cutFrom) + GUIDED_NAV_SECTION + instr.slice(phase3Idx);
+    console.log('  [ok]   replaced guided navigation section with non-blocking version');
   } else {
-    throw new Error('Could not locate Phase 0 / Phase 3 anchors');
+    throw new Error(
+      'Could not locate Phase 3 anchor or a known nav-section start. ' +
+      'Check remote instructions manually.'
+    );
   }
 
   instr = replaceOnce(instr, 'Phase 4 captcha', PHASE4_OLD, PHASE4_NEW);
