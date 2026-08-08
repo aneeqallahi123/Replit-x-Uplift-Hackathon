@@ -24,6 +24,7 @@
   // -------------------------------------------------------------------
   const ASSISTANT_ID = 'e9311394-097b-49c6-a206-fef2569dce2c';
   const SESSION_STORAGE_KEY = 'maryam_session';
+  const FLOW_STORAGE_KEY = 'maryam_flow';
   const UPLIFT_BASE = 'https://api.upliftai.org/v1';
 
   // -------------------------------------------------------------------
@@ -33,16 +34,26 @@
 
     homepage: {
       page: 'homepage',
-      notes: 'DLIMS card href is #. Do not point_to_element ' +
-             'on it. Call start_service() or navigate_to_page' +
-             '("services") instead.',
+      instruction: 'GUIDED MODE: When the citizen wants a service ' +
+                   '(e.g. license renewal), call start_service with ' +
+                   'service_key (and mode if known). It will POINT at ' +
+                   'the button the citizen must click and WAIT for ' +
+                   'their click — you never click for them. After ' +
+                   'every page change you receive a [PAGE UPDATE] ' +
+                   'message; when the flow is active, immediately ' +
+                   'call guide_next_step to continue guiding.',
+      notes: 'Do not use navigate_to_page during a guided flow — ' +
+             'the citizen must click the buttons themselves.',
     },
 
     services: {
       page: 'services',
-      instruction: 'Use start_service() for any service. ' +
-                   'Pass service_key and mode. ' +
-                   'Only use point_to_element for fine control.',
+      instruction: 'GUIDED MODE: call start_service(service_key, mode) ' +
+                   'to begin pointing. Each step points at ONE element ' +
+                   'and waits for the citizen to click it. After a ' +
+                   'click, the tool result tells you what to say and ' +
+                   'that you should call guide_next_step for the next ' +
+                   'step. Never click for the citizen.',
       elements: [
         {
           service_key:  'renewal_driving_license',
@@ -133,10 +144,12 @@
       page:     'apply',
       service:  'renewal_driving_license',
       formType: 'renewal-license',
-      instruction: 'Use fill_field() for each field. ' +
+      instruction: 'Use fill_field() for each field, in order. ' +
                    'Always confirm value verbally before filling. ' +
-                   'After all 5 fields: point to captcha, ' +
-                   'then point to submit button.',
+                   'After all 5 fields: point_to_element to the captcha ' +
+                   '(.math-captcha-wrapper) — the citizen answers it ' +
+                   'themselves — then point_to_element to the submit ' +
+                   'button (#btnSubmitApplication) and wait for their click.',
       fields: [
         {
           order:      1,
@@ -239,6 +252,129 @@
     if (path.endsWith('services.html')) return 'services';
     if (path.endsWith('apply.html')) return 'apply';
     return 'homepage';
+  }
+
+  // -------------------------------------------------------------------
+  // SECTION 3B — Guided flow state machine (sessionStorage-backed)
+  //
+  // A "flow" walks the citizen through a whole service, one click at a
+  // time. Each step points at ONE element and waits for the citizen's
+  // own click — never auto-clicking. State survives page reloads so
+  // the flow resumes after navigation.
+  // -------------------------------------------------------------------
+  const FLOW_STEPS = [
+    {
+      id: 'open_services',
+      page: 'homepage',
+      selector: function () { return '.hero_actions .btn_apply_service_hero'; },
+      fallbackSelector: 'a[href="services.html"]',
+      navigates: true,
+      say_after: 'Bohat acha! Ab hum services page par ja rahe hain.',
+    },
+    {
+      id: 'select_card',
+      page: 'services',
+      selector: function (flow) {
+        return '[data-service-key="' + flow.serviceKey + '"]';
+      },
+      navigates: false,
+      say_after: 'Shabash! Service khul gayi hai. Ab apply karne ka tareeqa chunna hai.',
+    },
+    {
+      id: 'select_mode',
+      page: 'services',
+      selector: function (flow) {
+        return flow.mode === 'doorstep' ? '.apply_self' : '.apply_online';
+      },
+      navigates: false,
+      say_after: 'Theek hai, tareeqa select ho gaya. Ab Apply button dabana hai.',
+    },
+    {
+      id: 'apply',
+      page: 'services',
+      selector: function () { return '.btn-apply-service'; },
+      navigates: true,
+      say_after: 'Application form khul raha hai.',
+    },
+    {
+      id: 'form',
+      page: 'apply',
+      // No pointing — the agent fills fields one by one via fill_field.
+      // guide_next_step advances to the captcha step once every field
+      // has a value.
+      form: true,
+    },
+    {
+      id: 'captcha',
+      page: 'apply',
+      // Special handling: only advances once the captcha answer is
+      // actually CORRECT (checked against wrapper.dataset.answer),
+      // never merely because the citizen clicked the captcha box.
+      captcha: true,
+    },
+    {
+      id: 'submit',
+      page: 'apply',
+      selector: function () { return '#btnSubmitApplication'; },
+      navigates: false,
+      say_after: 'Application submit ho rahi hai.',
+    },
+    {
+      id: 'finish',
+      page: 'apply',
+      // Virtual step: verifies the success screen appeared and closes
+      // the flow (or reports validation errors and returns to submit).
+      finish: true,
+    },
+  ];
+
+  // Form field IDs the guided renewal flow fills (renewal-license form).
+  const RENEWAL_FORM_FIELD_IDS =
+    ['fCnic', 'fLicenseNo', 'fIssuanceDate', 'fDuration', 'fPossession'];
+
+  // Reads the live captcha state: answered correctly or not. The
+  // expected answer is exposed by apply.js on wrapper.dataset.answer.
+  function getCaptchaState() {
+    const wrapper = document.querySelector('.math-captcha-wrapper');
+    if (!wrapper) return { present: false, correct: false, answered: false };
+    const input = wrapper.querySelector('.math-captcha-input');
+    const val = input ? input.value.trim() : '';
+    return {
+      present: true,
+      answered: val !== '',
+      correct: val !== '' && Number(val) === Number(wrapper.dataset.answer),
+      question: (wrapper.querySelector('.math-question') || {}).textContent || '',
+    };
+  }
+
+  // Guided form-filling metadata only exists for the renewal-license
+  // form. Other services reach the apply page with different fields.
+  function flowHasKnownFormSchema(flow) {
+    if (typeof SERVICES !== 'undefined' && SERVICES[flow.serviceKey]) {
+      return SERVICES[flow.serviceKey].formType === 'renewal-license';
+    }
+    return flow.serviceKey === 'renewal_driving_license' ||
+           flow.serviceKey === 'international_driving_license';
+  }
+
+  function loadFlow() {
+    try {
+      return JSON.parse(sessionStorage.getItem(FLOW_STORAGE_KEY));
+    } catch (e) { return null; }
+  }
+  function saveFlow(flow) {
+    sessionStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(flow));
+  }
+  function clearFlow() {
+    sessionStorage.removeItem(FLOW_STORAGE_KEY);
+  }
+
+  // First step index that lives on the given page.
+  function firstStepIndexForPage(pageKey) {
+    for (let i = 0; i < FLOW_STEPS.length; i++) {
+      if (FLOW_STEPS[i].page === pageKey) return i;
+    }
+    return 0;
   }
 
   // -------------------------------------------------------------------
@@ -452,115 +588,340 @@
     setTimeout(() => setStatus('', false), 2500);
   }
 
-  function handleGetPageContext() {
+  // Live snapshot of what the citizen can currently see/do — merged
+  // into every get_page_context result and every page-update push.
+  function buildLiveContext() {
     const pageKey = getCurrentPageKey();
-    return SITE_CONFIG[pageKey] || { page: pageKey, notes: 'No config.' };
+    const live = { page: pageKey };
+
+    const flow = loadFlow();
+    if (flow) {
+      const step = FLOW_STEPS[flow.stepIndex];
+      live.guided_flow = {
+        service_key: flow.serviceKey,
+        mode: flow.mode,
+        current_step: step ? step.id : 'done',
+        step_number: flow.stepIndex + 1,
+        total_steps: FLOW_STEPS.length,
+      };
+    }
+
+    if (pageKey === 'services') {
+      const activeCard = document.querySelector('.service-card-item.active-card');
+      live.expanded_service = activeCard
+        ? activeCard.getAttribute('data-service-key') : null;
+      live.mode_selected =
+        !!document.querySelector('.apply-option-card.active');
+      live.apply_panel_open = !!document.querySelector('.service-expanded-panel');
+    }
+
+    if (pageKey === 'apply') {
+      const params = new URLSearchParams(window.location.search);
+      live.service = params.get('service');
+      live.mode = params.get('mode');
+      const values = {};
+      ['fCnic', 'fLicenseNo', 'fIssuanceDate', 'fDuration', 'fPossession']
+        .forEach(function (id) {
+          const el = document.getElementById(id);
+          if (el) values[id] = el.value || '';
+        });
+      live.form_values = values;
+      live.success_shown =
+        !!document.getElementById('successView') &&
+        document.getElementById('successView').style.display === 'block';
+    }
+
+    return live;
   }
 
-  // High-level orchestrator: navigates an entire service flow in one
-  // call (card click → mode selection → Apply) instead of chaining
-  // five separate tool calls.
+  function handleGetPageContext() {
+    const pageKey = getCurrentPageKey();
+    const config = SITE_CONFIG[pageKey] || { page: pageKey, notes: 'No config.' };
+    return { ...config, live: buildLiveContext() };
+  }
+
+  // Guided flow entry point: initializes the step tracker anchored at
+  // the current page and executes the first step — POINTING at the
+  // element the citizen must click and WAITING for their click.
+  // Maryam never clicks for the citizen.
   async function handleStartService(payload) {
     const serviceKey = payload.service_key;
-    const mode = payload.mode || 'self_service';
+    const mode = payload.mode === 'doorstep' ? 'doorstep' : 'online';
 
-    console.log('[Maryam] start_service called:', serviceKey, mode);
-    showToolBadge('🚀 ' + serviceKey + ' / ' + mode);
+    console.log('[Maryam] start_service (guided):', serviceKey, mode);
+    showToolBadge('🧭 ' + serviceKey + ' / ' + mode);
+
+    const currentPage = getCurrentPageKey();
+    const flow = {
+      serviceKey: serviceKey,
+      mode: mode,
+      stepIndex: firstStepIndexForPage(currentPage),
+      startedAt: Date.now(),
+    };
+    saveFlow(flow);
+
+    return JSON.stringify(await executeCurrentFlowStep());
+  }
+
+  // Executes the flow's current step and advances state on the
+  // citizen's click. Detects page mismatches and re-anchors.
+  async function executeCurrentFlowStep(isRetryAfterMismatch) {
+    const flow = loadFlow();
+    if (!flow) {
+      return {
+        active: false,
+        presentationInstructions:
+          'Koi guided flow active nahi hai. Pehle start_service call karein.',
+      };
+    }
+
+    const step = FLOW_STEPS[flow.stepIndex];
+    if (!step) {
+      clearFlow();
+      return {
+        active: false,
+        completed: true,
+        presentationInstructions:
+          'Guided flow mukammal ho gaya hai. Kya aur madad chahiye?',
+      };
+    }
 
     const currentPage = getCurrentPageKey();
 
-    // ── If on homepage, navigate to services first ──────────
-    if (currentPage === 'homepage') {
-      setStatus('سروسز کی طرف جا رہے ہیں...', true);
-      const saved = loadSavedSession();
-      if (saved) saveSession({ ...saved, agentNavigated: true });
-      window.location.href = 'services.html';
-      return JSON.stringify({
-        navigating: true,
-        to: 'services.html',
-        presentationInstructions:
-          'Services page par ja raha hoon. Wahan pohanchne ke baad aage guide karoonga.',
-      });
-    }
-
-    // ── If on services page, run full selection flow ─────────
-    if (currentPage === 'services') {
-      const selector = '[data-service-key="' + serviceKey + '"]';
-      setStatus('سروس منتخب کر رہا ہوں...', true);
-
-      try {
-        // Step 1: Click the service card
-        const card = await waitForElement(selector);
-        await movePointerTo(card);
-        triggerPulse();
-        await delay(600);
-        card.click();
-        await delay(900);
-
-        // Step 2: Select delivery mode
-        const modeSelector = mode === 'doorstep'
-          ? '.apply_self'
-          : '.apply_online';
-
-        const modeEl = await waitForElement(modeSelector, 5000);
-        setStatus(
-          mode === 'doorstep'
-            ? 'گھر پہنچ سروس منتخب کر رہے ہیں...'
-            : 'سیلف سروس منتخب کر رہے ہیں...',
-          true
-        );
-        await movePointerTo(modeEl);
-        triggerPulse();
-        await delay(400);
-        modeEl.click();
-        await delay(500);
-
-        // Step 3: Click Apply button
-        const applyBtn = await waitForElement('.btn-apply-service', 5000);
-        setStatus('درخواست شروع کر رہے ہیں...', true);
-        await movePointerTo(applyBtn);
-        triggerPulse();
-        await delay(500);
-
-        // Save state so apply.html knows to auto-reconnect
-        const saved = loadSavedSession();
-        if (saved) saveSession({
-          ...saved,
-          agentNavigated: true,
-          serviceKey: serviceKey,
-          mode: mode,
-        });
-
-        applyBtn.click();
-
-        return JSON.stringify({
-          success: true,
-          service: serviceKey,
-          mode: mode,
+    // ── Mismatch recovery: re-anchor the flow to the page the
+    //    citizen actually sees, then continue from there. ──────
+    if (step.page !== currentPage) {
+      if (isRetryAfterMismatch) {
+        return {
+          active: true,
+          page_mismatch: true,
+          expected_page: step.page,
+          current_page: currentPage,
           presentationInstructions:
-            'Service select ho gayi. Application form khul raha hai. ' +
-            'Ab aapka CNIC number poochhta hoon.',
-        });
-      } catch (err) {
-        console.error('[Maryam] start_service failed:', err.message);
-        return JSON.stringify({
-          success: false,
-          error: err.message,
-          presentationInstructions:
-            'Service select karne mein masla aaya. ' +
-            'Kya aap dobara koshish karna chahenge?',
-        });
+            'User expected page par nahi hai. Unhe batayein ke woh "' +
+            step.page + '" page par jayen, ya start_service dobara call karein.',
+        };
       }
+      const reAnchored = firstStepIndexForPage(currentPage);
+      console.warn(
+        '[Maryam] Flow mismatch: expected', step.page,
+        'but on', currentPage, '— re-anchoring to step', reAnchored
+      );
+      flow.stepIndex = reAnchored;
+      saveFlow(flow);
+      const result = await executeCurrentFlowStep(true);
+      result.page_mismatch_recovered = true;
+      result.note = 'User was on ' + currentPage + ' instead of ' + step.page +
+        '; flow re-anchored to step "' + FLOW_STEPS[reAnchored].id + '".';
+      return result;
     }
 
-    // ── Already on apply page ────────────────────────────────
-    return JSON.stringify({
-      success: false,
-      already_on_apply: true,
-      presentationInstructions:
-        'Aap pehle se application form par hain. ' +
-        'Kaunsa field bharna hai?',
+    // ── Form step (apply page): hand over to fill_field flow ──
+    if (step.form) {
+      const live = buildLiveContext();
+
+      if (!flowHasKnownFormSchema(flow)) {
+        // Unknown form schema — guide generically, don't invent fields.
+        return {
+          active: true,
+          step: 'form',
+          known_schema: false,
+          live: live,
+          presentationInstructions:
+            'Application form khul gaya hai, lekin is service ke form ki ' +
+            'poori guidance abhi available nahi. get_page_context se live ' +
+            'form values dekhein aur user ko form khud bharne mein zubaani ' +
+            'madad dein. Jab form mukammal ho, guide_next_step call karein.',
+        };
+      }
+
+      const values = (live.form_values) || {};
+      const missing = RENEWAL_FORM_FIELD_IDS.filter(function (id) {
+        return !(values[id] && String(values[id]).trim());
+      });
+
+      if (missing.length === 0) {
+        // All fields filled — advance to the captcha step.
+        flow.stepIndex += 1;
+        saveFlow(flow);
+        return executeCurrentFlowStep(isRetryAfterMismatch);
+      }
+
+      const apply = SITE_CONFIG.apply;
+      return {
+        active: true,
+        step: 'form',
+        known_schema: true,
+        live: live,
+        fields: apply.fields,
+        remaining_fields: missing,
+        presentationInstructions:
+          'Application form khul gaya hai. Fields ek ek kar ke bharein: ' +
+          'har field ke liye user se value poochhein, verbally confirm karein, ' +
+          'phir fill_field call karein. Abhi yeh fields baqi hain: ' +
+          missing.join(', ') + '. Sab bharne ke baad guide_next_step call ' +
+          'karein — main captcha aur submit khud dikhaungi.',
+      };
+    }
+
+    // ── Captcha step: advance only on a CORRECT answer ────────
+    if (step.captcha) {
+      const captcha = getCaptchaState();
+      if (captcha.correct) {
+        flow.stepIndex += 1;
+        saveFlow(flow);
+        return executeCurrentFlowStep(isRetryAfterMismatch);
+      }
+      // Not answered / wrong — point at the captcha, but do NOT
+      // advance on the click; the citizen must type the answer.
+      const pointResult = await pointAndWaitForClick('.math-captcha-wrapper', null);
+      const after = getCaptchaState();
+      if (after.correct) {
+        flow.stepIndex += 1;
+        saveFlow(flow);
+        return {
+          active: true,
+          step: 'captcha',
+          captcha_correct: true,
+          presentationInstructions:
+            'Captcha sahi hal ho gaya hai. Ab guide_next_step call karein ' +
+            'taake submit button dikhaya ja sake.',
+        };
+      }
+      return {
+        active: true,
+        step: 'captcha',
+        captcha_correct: false,
+        captcha_answered: after.answered,
+        captcha_question: after.question,
+        pointed: !!pointResult.clicked,
+        presentationInstructions:
+          'User ko batayein ke screen par security sawal "' + after.question +
+          '" ka jawab khud type karna hai (aap iska jawab na batayein). ' +
+          'Jab user keh de ke jawab likh diya hai, guide_next_step dobara ' +
+          'call karein — main check kar ke aage barhungi.',
+      };
+    }
+
+    // ── Finish step: confirm submission or report errors ──────
+    if (step.finish) {
+      const live = buildLiveContext();
+      if (live.success_shown) {
+        clearFlow();
+        const idEl = document.getElementById('successAppId');
+        const appId = idEl ? idEl.textContent.trim() : '';
+        return {
+          active: false,
+          completed: true,
+          application_id: appId,
+          presentationInstructions:
+            'Mubarak ho! Application kamyabi se submit ho gayi hai. ' +
+            'User ko Application ID zaroor bata dein: ' +
+            (appId || 'jo screen par nazar aa rahi hai') +
+            ' — digits ek ek kar ke parhein. ' +
+            '(Yeh demo hai — asli application file nahi hui.)',
+        };
+      }
+      // Submission failed validation — return to the ACTUAL failing
+      // step: incorrect captcha goes back to the captcha step;
+      // field errors go back to the form step.
+      const errorBox = document.getElementById('formError');
+      const errors = errorBox && !errorBox.classList.contains('d-none')
+        ? errorBox.textContent.trim() : '';
+      const captcha = getCaptchaState();
+      const captchaError =
+        document.querySelector('.math-captcha-wrapper .captcha_error');
+      const captchaFailed = !captcha.correct ||
+        (captchaError && captchaError.style.display !== 'none');
+      const failingStepId = captchaFailed && !errors ? 'captcha' : 'form';
+      flow.stepIndex = FLOW_STEPS.findIndex(function (s) {
+        return s.id === failingStepId;
+      });
+      saveFlow(flow);
+      return {
+        active: true,
+        step: 'finish',
+        submitted: false,
+        failing_step: failingStepId,
+        captcha_correct: captcha.correct,
+        validation_errors: errors || (captchaFailed
+          ? 'captcha answer wrong or empty' : 'unknown (form did not submit)'),
+        presentationInstructions: captchaFailed && !errors
+          ? 'Form submit nahi hua kyunke security sawal ka jawab ghalat ya ' +
+            'khaali tha. User ko batayein ke captcha dobara hal karein ' +
+            '(jawab aap na batayein), phir guide_next_step call karein.'
+          : 'Form submit nahi hua — errors: "' + (errors || 'fields') +
+            '". User ko masla samjhayein, ghalat fields theek karwayein ' +
+            '(fill_field se), phir guide_next_step call karein.',
+      };
+    }
+
+    // ── Pointing step: point and WAIT for the citizen's click ──
+    let selector = step.selector(flow);
+    if (!document.querySelector(selector) && step.fallbackSelector) {
+      selector = step.fallbackSelector;
+    }
+
+    const result = await pointAndWaitForClick(selector, function onClicked() {
+      // Advance the flow BEFORE navigation can tear the page down.
+      flow.stepIndex += 1;
+      saveFlow(flow);
+      if (step.navigates) {
+        const saved = loadSavedSession();
+        if (saved) saveSession({ ...saved, agentNavigated: true });
+      }
     });
+
+    if (!result.clicked) {
+      return {
+        active: true,
+        step: step.id,
+        clicked: false,
+        reason: result.reason || result.error,
+        presentationInstructions:
+          'User ne abhi click nahi kiya (' + (result.reason || result.error || 'unknown') +
+          '). Unhe dobara batayein ke highlighted button par click karein, ' +
+          'phir guide_next_step call karein.',
+      };
+    }
+
+    if (step.navigates) {
+      return {
+        active: true,
+        step: step.id,
+        clicked: true,
+        navigating: true,
+        presentationInstructions:
+          (step.say_after || 'Acha!') +
+          ' Naya page load ho raha hai — jab [PAGE UPDATE] message aaye, ' +
+          'foran guide_next_step call karein.',
+      };
+    }
+
+    const nextStep = FLOW_STEPS[flow.stepIndex];
+
+    // After the submit click, apply.js synchronously validates and
+    // shows either the success view or errors — verify immediately in
+    // the same RPC instead of relying on an extra tool call.
+    if (nextStep && nextStep.finish) {
+      await delay(600);
+      return executeCurrentFlowStep(isRetryAfterMismatch);
+    }
+
+    return {
+      active: true,
+      step: step.id,
+      clicked: true,
+      next_step: nextStep ? nextStep.id : 'done',
+      presentationInstructions:
+        (step.say_after || 'Acha!') +
+        ' Ab foran guide_next_step call karein taake agla button dikhaya ja sake.',
+    };
+  }
+
+  async function handleGuideNextStep() {
+    showToolBadge('🧭 اگلا قدم');
+    return executeCurrentFlowStep();
   }
 
   function handleNavigateToPage(payload) {
@@ -590,12 +951,31 @@
   });
 
   async function handlePointToElement(payload) {
-    const selector = payload.element_id;
+    return pointAndWaitForClick(payload.element_id, null);
+  }
 
+  // Shared point-and-wait engine: moves the pointer to the element,
+  // shows the Urdu prompt, and resolves only when the citizen clicks
+  // it themselves (or the operation is cancelled/superseded).
+  // `onClicked` (optional) runs synchronously inside the click handler,
+  // before resolution — used by guided flows to persist state before
+  // a navigation tears the page down.
+  // Generation token: every new point operation invalidates all older
+  // ones, including those still awaiting waitForElement — otherwise a
+  // stale operation whose element appears late could steal
+  // activePointCancel from the live one.
+  let pointOpSeq = 0;
+
+  async function pointAndWaitForClick(selector, onClicked) {
+    const myOp = ++pointOpSeq;
     if (activePointCancel) activePointCancel('superseded by new point_to_element');
 
     try {
       const el = await waitForElement(selector);
+      if (myOp !== pointOpSeq) {
+        return { clicked: false, cancelled: true, element_id: selector,
+                 reason: 'superseded while waiting for element' };
+      }
 
       // Move the animated green pointer to the element
       await movePointerTo(el);
@@ -655,6 +1035,11 @@
 
         function onClick() {
           cleanup();
+          try {
+            if (onClicked) onClicked();
+          } catch (e) {
+            console.error('[Maryam] onClicked callback failed:', e);
+          }
           resolve({ clicked: true, element_id: selector });
         }
 
@@ -799,6 +1184,50 @@
   let maryamRoom = null;
   let maryamConnected = false;
 
+  // Proactively tell the agent which page the citizen is on (and the
+  // guided-flow state) so it never gives instructions for the wrong
+  // page. Sent as a chat text stream (the channel Uplift/LiveKit
+  // agents read user input from), with a data-packet fallback.
+  async function pushPageContext(reason) {
+    if (!maryamRoom || !maryamConnected) return;
+
+    const live = buildLiveContext();
+    let text =
+      '[PAGE UPDATE — system message, not the citizen speaking] ' +
+      'Citizen is now on the "' + live.page + '" page (' + reason + '). ' +
+      'Live context: ' + JSON.stringify(live) + '. ';
+
+    if (live.guided_flow) {
+      text +=
+        'A guided flow for "' + live.guided_flow.service_key +
+        '" is ACTIVE at step "' + live.guided_flow.current_step +
+        '" (' + live.guided_flow.step_number + '/' +
+        live.guided_flow.total_steps + '). ' +
+        'Immediately call the guide_next_step tool to continue guiding ' +
+        'the citizen, and tell them (in Urdu) what to do next.';
+    } else {
+      text +=
+        'No guided flow is active. If the citizen asks for a service, ' +
+        'call start_service.';
+    }
+
+    try {
+      await maryamRoom.localParticipant.sendText(text, { topic: 'lk.chat' });
+      console.log('[Maryam] Page context pushed via text stream:', live.page);
+    } catch (err) {
+      console.warn('[Maryam] sendText failed, trying publishData:', err);
+      try {
+        await maryamRoom.localParticipant.publishData(
+          new TextEncoder().encode(text),
+          { reliable: true, topic: 'lk.chat' }
+        );
+        console.log('[Maryam] Page context pushed via data packet');
+      } catch (err2) {
+        console.error('[Maryam] Page context push failed entirely:', err2);
+      }
+    }
+  }
+
   function attachAudioTrack(track) {
     const audioEl = track.attach();
     audioEl.id = 'maryam-audio-output';
@@ -864,6 +1293,39 @@
         const payload = JSON.parse(data.payload);
         const args = payload.arguments ? payload.arguments.raw_arguments : payload;
         return JSON.stringify(await handleFillField(args));
+      }
+    );
+    room.localParticipant.registerRpcMethod(
+      'scroll_to_element',
+      async (data) => {
+        const payload = JSON.parse(data.payload);
+        const args = payload.arguments ? payload.arguments.raw_arguments : payload;
+        const selector = args.element_id;
+        const el = document.querySelector(selector);
+        if (!el) {
+          return JSON.stringify({
+            scrolled: false,
+            error: 'Element not found: ' + selector,
+          });
+        }
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        await delay(700);
+        return JSON.stringify({ scrolled: true, element_id: selector });
+      }
+    );
+    room.localParticipant.registerRpcMethod(
+      'guide_next_step',
+      async () => {
+        console.log('[Maryam RPC] guide_next_step called');
+        try {
+          return JSON.stringify(await handleGuideNextStep());
+        } catch (err) {
+          console.error('[Maryam RPC] guide_next_step error:', err);
+          return JSON.stringify({
+            error: err.message,
+            presentationInstructions: 'Ek masla aaya. Dobara koshish karte hain.',
+          });
+        }
       }
     );
     room.localParticipant.registerRpcMethod(
@@ -994,7 +1456,22 @@
     }
 
     setStatus('مریم تیار ہے — بولیں', true);
-    await delay(2000);
+
+    // Tell the agent what page it's on — critical after guided
+    // navigation so it resumes the flow instead of guessing.
+    const saved = loadSavedSession();
+    const arrivedViaAgentNav = !!(saved && saved.agentNavigated);
+    if (arrivedViaAgentNav) {
+      // Consume the flag so a manual reload later doesn't auto-reconnect.
+      saveSession({ ...saved, agentNavigated: false });
+    }
+    // Small delay so the remote agent participant is fully joined.
+    await delay(1500);
+    await pushPageContext(
+      arrivedViaAgentNav ? 'arrived after guided navigation' : 'session connected'
+    );
+
+    await delay(500);
     setStatus('', false);
   }
 

@@ -1,0 +1,171 @@
+# Maryam Agent — Add scroll_to_element Tool (Merge Only)
+
+## Important: do NOT replace maryam-agent.js
+
+A file has been provided that adds scroll_to_element as a 
+replacement for the entire maryam-agent.js. DO NOT apply it 
+as a full replacement — it is an older version that is missing 
+all recent fixes including the mic button, user-gesture 
+connection, animated green pointer, extractArgs(), 
+start_service(), showToolBadge(), and auto-reconnect logic.
+
+Instead, extract only the new pieces from it and merge them 
+into the existing maryam-agent.js. Three things to add:
+
+---
+
+## Addition 1 — scrollToElement() helper function
+
+Add this function alongside the existing helper functions 
+(near waitForElement, delay, setStatus):
+
+  // Smoothly scrolls an element into view WITHOUT waiting
+  // for a click — used for orientation before navigation.
+  // Maryam calls this to say "let me show you this section"
+  // without requiring the citizen to click anything.
+  function scrollToElement(selector) {
+    return waitForElement(selector).then((el) => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return new Promise((resolve) => {
+        setTimeout(
+          () => resolve({ scrolled: true, element_id: selector }),
+          700
+        );
+      });
+    });
+  }
+
+---
+
+## Addition 2 — handleScrollToElement() tool handler
+
+Add this alongside handleGetPageContext, handleNavigateToPage, 
+handlePointToElement, handleFillField, handleStartService:
+
+  async function handleScrollToElement(payload) {
+    console.log('[Maryam] scroll_to_element:', payload.element_id);
+    showToolBadge('📜 ' + payload.element_id);
+    try {
+      const result = await scrollToElement(payload.element_id);
+      return JSON.stringify({
+        ...result,
+        presentationInstructions:
+          'Section scroll ho gayi. Aap dekh sakte hain.'
+      });
+    } catch (err) {
+      console.error('[Maryam] scroll_to_element failed:', err.message);
+      return JSON.stringify({ scrolled: false, error: err.message });
+    }
+  }
+
+---
+
+## Addition 3 — Register scroll_to_element as RPC method
+
+Inside connectAndRegisterTools(), after the existing five 
+registerRpcMethod calls, add this sixth one:
+
+  room.localParticipant.registerRpcMethod(
+    'scroll_to_element',
+    async (data) => {
+      console.log('[Maryam RPC] scroll_to_element raw:', 
+        data.payload);
+      try {
+        const args = extractArgs(data.payload);
+        return await handleScrollToElement(args);
+      } catch (err) {
+        console.error('[Maryam RPC] scroll_to_element error:', err);
+        return JSON.stringify({ error: err.message });
+      }
+    }
+  );
+
+---
+
+## Addition 4 — Add homepage sections to SITE_CONFIG
+
+The existing SITE_CONFIG homepage entry only has a notes 
+field. Update it to also include a sections array so 
+get_page_context() tells Maryam what she can scroll to 
+on the homepage before navigating:
+
+Replace the existing homepage entry in SITE_CONFIG:
+
+  // OLD
+  homepage: {
+    page: 'homepage',
+    notes: 'DLIMS card href is #. Do not point_to_element...',
+  },
+
+  // NEW
+  homepage: {
+    page: 'homepage',
+    sections: [
+      {
+        id: '#govt_services',
+        label_en: 'Explore Available Services',
+        label_ur: 'دستیاب سروسز',
+        description: 'A grid of government service categories ' +
+          'including DLIMS (driving license), LDA, Excise, ' +
+          'Local Government, and Board of Revenue.',
+        interaction: 'scroll_to_element',
+      },
+      {
+        id: '#dlims-services',
+        label_en: 'DLIMS Services Section',
+        label_ur: 'ڈی ایل آئی ایم ایس سروسز',
+        description: 'Explains that all driving license services ' +
+          'are available on Dastak: applying, tracking, records.',
+        interaction: 'scroll_to_element',
+      },
+    ],
+    notes: 'DLIMS category card inside #govt_services has ' +
+           'href="#" and must NOT be pointed at or clicked. ' +
+           'Use scroll_to_element to orient the user first, ' +
+           'then call navigate_to_page("services") directly. ' +
+           'Do not attempt point_to_element for this transition.',
+  },
+
+---
+
+## Nothing else changes
+
+Do not modify:
+- connectAndRegisterTools() connection logic
+- Mic button / user gesture connection (DOMContentLoaded 
+  must only inject UI, not auto-connect)
+- Animated green pointer (#maryam-pointer) — keep as-is,
+  do NOT revert to red dot (.maryam-pointer-dot)
+- extractArgs() — keep existing multi-shape version
+- start_service() tool — keep as-is
+- showToolBadge() — keep as-is
+- Audio playback (TrackSubscribed) — keep as-is
+- Active speaker feedback — keep as-is
+- Auto-reconnect logic — keep as-is
+- Any HTML files
+
+---
+
+## What scroll_to_element enables
+
+This tool fills the gap between arriving on a page and 
+knowing where to click. Before this, Maryam could only 
+navigate or point. Now she can:
+
+1. User lands on homepage
+2. Maryam says "Aapko DLIMS services chahiye? 
+   Pehle dekh lete hain"
+3. Maryam calls scroll_to_element("#govt_services")
+4. Page scrolls smoothly to the services grid
+5. Citizen sees the services section
+6. Maryam says "Yeh hain available services. 
+   Driving license ke liye aage chaltay hain"
+7. Maryam calls navigate_to_page("services")
+8. Browser navigates to services.html
+
+The scroll gives the citizen visual context and 
+orientation before navigation happens — it makes 
+the experience feel guided rather than abrupt.
+
+Commit: "Add scroll_to_element orientation tool"
+Push to GitHub.
