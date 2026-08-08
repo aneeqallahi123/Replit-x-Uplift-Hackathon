@@ -33,11 +33,32 @@
   // -------------------------------------------------------------------
   // SECTION 2 — Site config (embedded, no network call needed)
   // -------------------------------------------------------------------
+  // Applies to every guided step on every page — repeated here once
+  // instead of on every single tool result, since the model does not
+  // always re-read older context.
+  //
+  // CRITICAL #1: every tool result's presentationInstructions contains a
+  // line you must SPEAK OUT LOUD, in the SAME turn as the tool call. Never
+  // just move the pointer/highlight silently and wait — the citizen has
+  // no way to know what the highlight means without you saying it.
+  //
+  // CRITICAL #2: when a step completes, do NOT thank or praise the
+  // citizen for the previous click ("shabash", "bohat acha", etc.) before
+  // moving on. Go straight to the next action: "Ab agla qadam yeh hai: ...".
+  const GUIDED_FLOW_RULES =
+    'CRITICAL: (1) Every time you point at or highlight something, you ' +
+    'MUST speak the matching line from presentationInstructions in that ' +
+    'same turn — never highlight silently and wait for the citizen to ' +
+    'ask what happened. (2) After the citizen completes a step, do not ' +
+    'thank or praise them for it — go straight to the next instruction ' +
+    '("Ab agla qadam yeh hai: ...").';
+
   const SITE_CONFIG = {
 
     homepage: {
       page: 'homepage',
-      instruction: 'GUIDED MODE: When the citizen wants a service ' +
+      instruction: GUIDED_FLOW_RULES + ' ' +
+                   'GUIDED MODE: When the citizen wants a service ' +
                    '(e.g. license renewal), call start_service with ' +
                    'service_key (and mode if known). It will POINT at ' +
                    'the button the citizen must click and WAIT for ' +
@@ -62,7 +83,8 @@
 
     services: {
       page: 'services',
-      instruction: 'GUIDED MODE: call start_service(service_key, mode) ' +
+      instruction: GUIDED_FLOW_RULES + ' ' +
+                   'GUIDED MODE: call start_service(service_key, mode) ' +
                    'to begin pointing. Each step points at ONE element ' +
                    'and waits for the citizen to click it. After a ' +
                    'click, the tool result tells you what to say and ' +
@@ -176,7 +198,8 @@
       page:     'apply',
       service:  'renewal_driving_license',
       formType: 'renewal-license',
-      instruction: 'Use fill_field() for each field, in order. ' +
+      instruction: GUIDED_FLOW_RULES + ' ' +
+                   'Use fill_field() for each field, in order. ' +
                    'Always confirm value verbally before filling. ' +
                    'After all 5 fields are filled, call guide_next_step() — ' +
                    'it highlights the captcha itself (the citizen types the ' +
@@ -304,10 +327,13 @@
       selector: function () { return '.hero_actions .btn_apply_service_hero'; },
       fallbackSelector: 'a[href="services.html"]',
       navigates: true,
+      // Shown verbatim in the expanded panel's "next step" row — keep it
+      // short, in English, and action-first (no praise/thanks framing).
+      action_label: 'Click the "Apply Service" button.',
       // say_now: spoken as soon as the pointer appears (agent is free to talk)
       say_now: 'Theek hai! Pehle main aapko Services page par le chalti hoon. ' +
                'Screen par relevant button highlight ho gaya hai — uss par click karein.',
-      say_after: 'Bohat acha! Services page khul raha hai — ek second mein wahan pohonch jaayenge.',
+      say_after: 'Services page khul raha hai — ek second mein wahan pohonch jaayenge.',
     },
     {
       id: 'select_card',
@@ -316,9 +342,11 @@
         return '[data-service-key="' + flow.serviceKey + '"]';
       },
       navigates: false,
+      action_label: 'Click the highlighted service card.',
       say_now: 'Ab main "Renewal of Regular License" card highlight kar rahi hoon. ' +
                'Uss highlighted card par click karein.',
-      say_after: 'Shabash! Service khul gayi hai. Ab apply karne ka tareeqa chunein.',
+      say_after: 'Ab agla qadam yeh hai: apply karne ka tareeqa chunein — ' +
+                 'Self Service ya Doorstep.',
     },
     {
       id: 'select_mode',
@@ -327,14 +355,16 @@
         return flow.mode === 'doorstep' ? '.apply_self' : '.apply_online';
       },
       navigates: false,
+      action_label: 'Choose Self Service or Doorstep Service.',
       say_now: 'Bilkul. Main aapka pasandida tareeqa highlight kar rahi hoon — uss par click karein.',
-      say_after: 'Theek hai, tareeqa select ho gaya. Ab Apply button dabana hai.',
+      say_after: 'Ab agla qadam yeh hai: highlighted Apply button dabayein.',
     },
     {
       id: 'apply',
       page: 'services',
       selector: function () { return '.btn-apply-service'; },
       navigates: true,
+      action_label: 'Click the "Apply" button.',
       say_now: 'Apply button highlight ho gaya hai — uss par click karein taake application form khule.',
       say_after: 'Application form khul raha hai — ek second mein wahan pohonch jaayenge.',
     },
@@ -344,6 +374,7 @@
       // No pointing — the agent fills fields one by one via fill_field.
       // guide_next_step advances to the captcha step once every field
       // has a value.
+      action_label: 'Answer the questions to fill in the application form.',
       form: true,
     },
     {
@@ -352,6 +383,7 @@
       // Special handling: only advances once the captcha answer is
       // actually CORRECT (checked against wrapper.dataset.answer),
       // never merely because the citizen clicked the captcha box.
+      action_label: 'Solve the highlighted math question.',
       captcha: true,
     },
     {
@@ -359,6 +391,7 @@
       page: 'apply',
       selector: function () { return '#btnSubmitApplication'; },
       navigates: false,
+      action_label: 'Click the "Submit" button.',
       say_after: 'Application submit ho rahi hai.',
     },
     {
@@ -366,6 +399,7 @@
       page: 'apply',
       // Virtual step: verifies the success screen appeared and closes
       // the flow (or reports validation errors and returns to submit).
+      action_label: 'Reviewing your application...',
       finish: true,
     },
   ];
@@ -615,6 +649,155 @@
       @media (max-width: 480px) {
         #maryam-label { display: none; }
       }
+      #maryam-panel {
+        position: fixed;
+        bottom: 102px;
+        right: 24px;
+        width: 300px;
+        max-width: calc(100vw - 32px);
+        background: #ffffff;
+        border-radius: 20px;
+        border: 1px solid rgba(13,107,57,0.08);
+        box-shadow: 0 22px 50px rgba(13,107,57,0.25), 0 4px 14px rgba(0,0,0,0.08);
+        padding: 16px;
+        display: none;
+        flex-direction: column;
+        gap: 12px;
+        z-index: 99997;
+        font-family: 'Manrope', 'Outfit', sans-serif;
+        transform-origin: bottom right;
+      }
+      #maryam-panel.open {
+        display: flex;
+        animation: maryamPanelIn 0.2s ease-out;
+      }
+      @keyframes maryamPanelIn {
+        from { opacity: 0; transform: scale(0.94) translateY(8px); }
+        to   { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      .maryam-panel-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .maryam-panel-header img {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        object-position: top center;
+        border: 2px solid var(--primary-color, #0d6b39);
+        flex-shrink: 0;
+      }
+      .maryam-panel-heading {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.25;
+        min-width: 0;
+      }
+      .maryam-panel-title {
+        font-weight: 800;
+        font-size: 14.5px;
+        color: var(--primary-color, #0d6b39);
+      }
+      .maryam-panel-subtitle {
+        font-size: 11.5px;
+        color: #6b7a70;
+        font-weight: 600;
+      }
+      .maryam-activity-row {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        background: #f3f8f5;
+        border-radius: 12px;
+        padding: 9px 12px;
+      }
+      #maryam-activity-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #9aa39a;
+        flex-shrink: 0;
+      }
+      #maryam-activity-text {
+        font-size: 13px;
+        font-weight: 700;
+        color: #2f4b3c;
+      }
+      .maryam-activity-row.is-listening #maryam-activity-dot {
+        background: #f5bb18;
+        animation: maryamDotPulse 1s ease-in-out infinite;
+      }
+      .maryam-activity-row.is-speaking #maryam-activity-dot {
+        background: var(--primary-color, #0d6b39);
+        animation: maryamDotPulse 1s ease-in-out infinite;
+      }
+      .maryam-activity-row.is-connecting #maryam-activity-dot {
+        background: #9aa39a;
+        animation: maryamDotPulse 0.8s ease-in-out infinite;
+      }
+      .maryam-activity-row.is-error #maryam-activity-dot {
+        background: #d9534f;
+      }
+      @keyframes maryamDotPulse {
+        0%, 100% { transform: scale(1);   opacity: 1;   }
+        50%      { transform: scale(1.5); opacity: 0.55; }
+      }
+      .maryam-nextstep-row {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 0 2px;
+      }
+      .maryam-nextstep-label {
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        color: #b9860a;
+        text-transform: uppercase;
+      }
+      #maryam-next-step-text {
+        font-size: 13.5px;
+        font-weight: 600;
+        color: #20291f;
+        line-height: 1.4;
+      }
+      .maryam-panel-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 2px;
+      }
+      .maryam-panel-actions button {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border: none;
+        border-radius: 12px;
+        padding: 9px 10px;
+        font-size: 12.5px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+        transition: filter 0.15s ease;
+      }
+      .maryam-panel-actions button:hover {
+        filter: brightness(0.96);
+      }
+      #maryam-mute-btn {
+        background: #eef3ef;
+        color: var(--primary-color, #0d6b39);
+      }
+      #maryam-mute-btn.is-muted {
+        background: #fbeecb;
+        color: #8a6512;
+      }
+      #maryam-end-btn {
+        background: #fdeceb;
+        color: #a83232;
+      }
       .field-highlight {
         outline: 2.5px solid #167B38 !important;
         background-color: #f1f8f3 !important;
@@ -656,6 +839,142 @@
       '<span id="maryam-mic-badge">🎤</span>';
     micBtn.classList.add('connecting');
     document.body.appendChild(micBtn);
+
+    // Expanded panel: click the avatar (once connected) to see what
+    // Maryam is doing right now — listening/speaking vs. the actual next
+    // action she wants the citizen to take — plus mute/end controls.
+    const panel = document.createElement('div');
+    panel.id = 'maryam-panel';
+    panel.innerHTML =
+      '<div class="maryam-panel-header">' +
+        '<img src="assets/images/maryam-avatar.png" alt="Maryam">' +
+        '<div class="maryam-panel-heading">' +
+          '<span class="maryam-panel-title">Maryam</span>' +
+          '<span class="maryam-panel-subtitle">Your AI assisted guide</span>' +
+        '</div>' +
+      '</div>' +
+      '<div id="maryam-activity-row" class="maryam-activity-row is-idle">' +
+        '<span id="maryam-activity-dot"></span>' +
+        '<span id="maryam-activity-text">Tap the mic to talk to Maryam.</span>' +
+      '</div>' +
+      '<div class="maryam-nextstep-row">' +
+        '<span class="maryam-nextstep-label">Next step</span>' +
+        '<span id="maryam-next-step-text">Tell me what service you need, or ask a question.</span>' +
+      '</div>' +
+      '<div class="maryam-panel-actions">' +
+        '<button id="maryam-mute-btn" type="button">🎤 Mute</button>' +
+        '<button id="maryam-end-btn" type="button">✕ End</button>' +
+      '</div>';
+    document.body.appendChild(panel);
+
+    // Clicking anywhere outside the panel/avatar closes the panel — it's
+    // a peek at what's happening, not a modal.
+    document.addEventListener('click', function (e) {
+      if (!panel.classList.contains('open')) return;
+      if (panel.contains(e.target) || micBtn.contains(e.target)) return;
+      closePanel();
+    });
+  }
+
+  function openPanel() {
+    const panel = document.getElementById('maryam-panel');
+    if (panel) panel.classList.add('open');
+  }
+  function closePanel() {
+    const panel = document.getElementById('maryam-panel');
+    if (panel) panel.classList.remove('open');
+  }
+  function togglePanel() {
+    const panel = document.getElementById('maryam-panel');
+    if (panel) panel.classList.toggle('open');
+  }
+
+  // Human-readable defaults for the panel's activity row. Keep these
+  // distinct from the "next step" text: activity is what Maryam is doing
+  // right now (listening/speaking/connecting); next step is the action
+  // she wants the citizen to take.
+  const ACTIVITY_LABELS = {
+    idle: 'Tap the mic to talk to Maryam.',
+    connecting: 'Connecting to Maryam...',
+    connected: 'Ready — start speaking.',
+    listening: 'Listening to you...',
+    speaking: 'Maryam is speaking...',
+    muted: 'Mic muted.',
+    error: 'Connection issue — tap to retry.',
+  };
+
+  function setActivity(kind, text) {
+    const row = document.getElementById('maryam-activity-row');
+    if (!row) return;
+    row.className = 'maryam-activity-row is-' + kind;
+    const label = document.getElementById('maryam-activity-text');
+    if (label) label.textContent = text || ACTIVITY_LABELS[kind] || '';
+  }
+
+  // The concrete action Maryam wants the citizen to take right now — e.g.
+  // "Click the highlighted service card." Distinct from setActivity(),
+  // which only reflects listening/speaking/connection state.
+  function setNextStep(text) {
+    const el = document.getElementById('maryam-next-step-text');
+    if (el) el.textContent = text || 'Tell me what service you need, or ask a question.';
+  }
+
+  function bindPanelButtons() {
+    const muteBtn = document.getElementById('maryam-mute-btn');
+    const endBtn = document.getElementById('maryam-end-btn');
+
+    if (muteBtn) {
+      muteBtn.addEventListener('click', async function () {
+        if (!maryamConnected || !maryamRoom) return;
+        const wasOn = maryamRoom.localParticipant.isMicrophoneEnabled;
+        await maryamRoom.localParticipant.setMicrophoneEnabled(!wasOn);
+        const micBtn = document.getElementById('maryam-mic-btn');
+        setMicIcon(micBtn, wasOn ? '🔇' : '🎤');
+        if (micBtn) micBtn.classList.toggle('muted', wasOn);
+        muteBtn.textContent = wasOn ? '🔊 Unmute' : '🎤 Mute';
+        muteBtn.classList.toggle('is-muted', wasOn);
+        setActivity(wasOn ? 'muted' : 'connected');
+      });
+    }
+
+    if (endBtn) {
+      endBtn.addEventListener('click', function () {
+        endSession();
+      });
+    }
+  }
+
+  // Fully stops Maryam — disconnects the room and mic, clears the saved
+  // session/guided flow so nothing auto-reconnects, and resets the
+  // widget to its pre-connection state. Distinct from muting, which
+  // keeps the session alive and just stops sending audio.
+  async function endSession() {
+    closePanel();
+    try {
+      if (maryamRoom) await maryamRoom.disconnect();
+    } catch (e) {
+      console.warn('[Maryam] Error while ending session:', e);
+    }
+    maryamRoom = null;
+    maryamConnected = false;
+    clearFlow();
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+
+    const micBtn = document.getElementById('maryam-mic-btn');
+    if (micBtn) {
+      micBtn.classList.remove('connecting', 'connected', 'listening', 'speaking', 'muted', 'error');
+      micBtn.disabled = false;
+      micBtn.title = 'Talk to Maryam';
+      setMicIcon(micBtn, '🎤');
+    }
+    const muteBtn = document.getElementById('maryam-mute-btn');
+    if (muteBtn) {
+      muteBtn.textContent = '🎤 Mute';
+      muteBtn.classList.remove('is-muted');
+    }
+    setStatus('', false);
+    setActivity('idle');
+    setNextStep(null);
   }
 
   function delay(ms) {
@@ -918,6 +1237,10 @@
       };
     }
 
+    // Surface the concrete next action in the expanded panel as soon as we
+    // know which step we're on — independent of what Maryam says out loud.
+    setNextStep(step.action_label);
+
     // ── Double-advance guard ────────────────────────────────────────
     // A duplicate guide_next_step arriving right behind an advance gets
     // the CURRENT step back, unchanged, instead of pushing the flow one
@@ -1046,6 +1369,7 @@
       movePointerTo(wrapper);   // not awaited — dot animates while Maryam talks
       triggerPulse();
       setStatus('Next step: solve the highlighted box');
+      setNextStep(step.action_label);
 
       // Wait (up to ~30 s) for the answer to become CORRECT. Resolves on
       // the input event — never a timer poll — so typing alone advances
@@ -1062,9 +1386,11 @@
           step: 'captcha',
           captcha_correct: true,
           presentationInstructions:
-            'Shabash! Security sawal ka jawab bilkul theek hai. Yeh batayein ' +
-            'aur foran guide_next_step() call karein taake submit ka qadam shuru ho. ' +
-            'Jawab khud kabhi na bolein.',
+            'SPEAK THIS NOW: "Security sawal ka jawab sahi hai. Ab agla ' +
+            'qadam yeh hai: submit button dabana." — then immediately call ' +
+            'guide_next_step() so the submit step begins. Never say the ' +
+            'captcha answer out loud, and do not thank the citizen — go ' +
+            'straight to the next step.',
         };
       }
 
@@ -1076,9 +1402,10 @@
         captcha_answered: getCaptchaState().answered,
         captcha_question: captcha.question,
         presentationInstructions:
-          'Screen par security sawal highlight ho gaya hai: "' +
-          (captcha.question || 'chota sa math sawal') + '". User ko kahein ke ' +
-          'woh iska jawab khud box mein type karein — aap jawab hargiz na batayein. ' +
+          'SPEAK THIS NOW, do not highlight silently — say: "Screen par ' +
+          'security sawal highlight ho gaya hai: ' +
+          (captcha.question || 'chota sa math sawal') + '. Iska jawab khud ' +
+          'box mein type karein." Aap jawab hargiz na batayein. ' +
           'Phir guide_next_step() dobara call karein taake main check kar sakoon.',
       };
     }
@@ -1170,7 +1497,7 @@
 
     if (step.navigates) {
       // Fire and forget — do not await, the response cannot survive unload.
-      pointAndAwaitClick(selector, { timeoutMs: 0, onClicked: onClicked })
+      pointAndAwaitClick(selector, { timeoutMs: 0, onClicked: onClicked, actionLabel: step.action_label })
         .then(function (r) {
           if (!r.clicked) {
             console.log('[Maryam] Navigating step point ended without click:', step.id, r);
@@ -1183,10 +1510,10 @@
         navigates: true,
         waiting_for_click: true,
         presentationInstructions:
+          'SPEAK THIS AS SOON AS THE POINTER APPEARS — do not highlight silently: "' +
           (step.say_now ||
-            'Relevant button highlight ho gaya hai. ' +
-            'User ko batayein ke woh highlighted element par click karein.') +
-          ' Uss click se naya page khulega. Koi tool call na karein — ' +
+            'Relevant button highlight ho gaya hai. Uss par click karein.') +
+          '" Uss click se naya page khulega. Koi tool call na karein — ' +
           'agla [PAGE UPDATE] message aane ka intezaar karein, phir ' +
           'foran guide_next_step() call karein.',
       };
@@ -1195,6 +1522,7 @@
     const outcome = await pointAndAwaitClick(selector, {
       timeoutMs: POINT_TIMEOUT_MS,
       onClicked: onClicked,
+      actionLabel: step.action_label,
     });
 
     if (outcome.clicked) {
@@ -1203,8 +1531,11 @@
         step: step.id,
         clicked: true,
         presentationInstructions:
-          (step.say_after || 'Theek hai, ho gaya.') +
-          ' Yeh line bolein aur foran guide_next_step() call karein.',
+          'SPEAK THIS NOW, do not stay silent — say exactly: "' +
+          (step.say_after || 'Ab agla qadam yeh hai.') +
+          '" — then immediately call guide_next_step(). Do NOT thank or ' +
+          'praise the citizen for the previous click; go straight to ' +
+          'what comes next.',
       };
     }
 
@@ -1549,7 +1880,9 @@
         labelMap[e.element_id] = e.label_en || e.label_ur || e.label;
       });
     }
-    setStatus('Click here: ' + (labelMap[selector] || selector));
+    const targetLabel = labelMap[selector] || selector;
+    setStatus('Click here: ' + targetLabel);
+    setNextStep(opts.actionLabel || ('Click "' + targetLabel + '".'));
 
     // Wait for the CITIZEN to click the element (never auto-click).
     return new Promise((resolve) => {
@@ -1666,6 +1999,9 @@
       // Move pointer to the field (not awaited — see movePointerTo)
       movePointerTo(el);
       triggerPulse();
+
+      const fieldMeta = SITE_CONFIG.apply.fields.find((f) => f.field_id === fieldId);
+      setNextStep('Filling in: ' + (fieldMeta ? fieldMeta.label_en : fieldId));
 
       // Highlight the field
       el.classList.add('field-highlight');
@@ -2129,6 +2465,7 @@
         btn.title = 'Connection lost — click to reconnect';
       }
       setStatus('Connection lost — click to reconnect', true);
+      setActivity('error', 'Connection lost — click to reconnect.');
     });
 
     // ── Speaking indicators: log + visual feedback ───────────
@@ -2150,12 +2487,15 @@
           window._maryamRetryAudio();
         }
         setStatus('Listening...', true);
+        setActivity('listening');
         if (btn) { btn.classList.add('listening'); btn.classList.remove('speaking'); }
       } else if (agentSpeaking) {
         setStatus('Maryam is speaking...', true);
+        setActivity('speaking');
         if (btn) { btn.classList.add('speaking'); btn.classList.remove('listening'); }
       } else {
         setStatus('', false);
+        if (maryamConnected) setActivity('connected');
         if (btn) { btn.classList.remove('listening', 'speaking'); }
       }
     });
@@ -2216,10 +2556,11 @@
       micBtn.classList.add('connected');
       setMicIcon(micBtn, '🎤');
       micBtn.disabled = false;
-      micBtn.title = 'Maryam is listening — click to mute';
+      micBtn.title = 'Maryam is listening — click to view status';
     }
 
     setStatus('Maryam is ready — start speaking', true);
+    setActivity('connected');
 
     // Tell the agent what page it's on — critical after guided
     // navigation so it resumes the flow instead of guessing.
@@ -2268,15 +2609,10 @@
     micBtn.title = 'Talk to Maryam';
 
     micBtn.addEventListener('click', async () => {
-      // If already connected — toggle mute
+      // Already connected — clicking the avatar peeks at what Maryam is
+      // doing instead of muting; mute/end live inside that panel now.
       if (maryamConnected && maryamRoom) {
-        const isOn = maryamRoom.localParticipant.isMicrophoneEnabled;
-        await maryamRoom.localParticipant.setMicrophoneEnabled(!isOn);
-        setMicIcon(micBtn, !isOn ? '🎤' : '🔇');
-        micBtn.classList.toggle('muted', isOn);
-        setStatus(!isOn ? 'Mic on' : 'Mic off', true);
-        await delay(1500);
-        setStatus('', false);
+        togglePanel();
         return;
       }
 
@@ -2285,6 +2621,7 @@
       setMicIcon(micBtn, '⏳');
       micBtn.classList.add('connecting');
       setStatus('Connecting to Maryam...', true);
+      setActivity('connecting');
 
       try {
         await connectAndRegisterTools();
@@ -2295,6 +2632,7 @@
         setMicIcon(micBtn, '⚠️');
         micBtn.disabled = false;
         setStatus('Connection failed — click to retry', true);
+        setActivity('error');
         // A stale saved session may be the cause — clear it so the
         // retry click creates a fresh one.
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
@@ -2306,6 +2644,7 @@
     injectPointerStylesOnce();
     injectPointerElements();
     bindMicButton();
+    bindPanelButtons();
 
     // Auto-reconnect whenever this tab has ever had a session.
     //
@@ -2319,6 +2658,7 @@
     if (saved) {
       setTimeout(async () => {
         setStatus('Reconnecting to Maryam...', true);
+        setActivity('connecting', 'Reconnecting to Maryam...');
         const micBtn = document.getElementById('maryam-mic-btn');
         if (micBtn) {
           setMicIcon(micBtn, '⏳');
@@ -2341,6 +2681,7 @@
               micBtn.classList.add('error');
             }
             setStatus('Connection failed — press the mic button', true);
+            setActivity('error', 'Connection failed — press the mic button.');
           }
         }
       }, 800);
