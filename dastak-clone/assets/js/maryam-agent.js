@@ -1151,15 +1151,17 @@
   }
 
   async function createNewSession() {
-    const res = await fetch(
-      `${UPLIFT_BASE}/realtime-assistants/${ASSISTANT_ID}/createPublicSession`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ participantName: 'Citizen' }),
-      }
-    );
-    if (!res.ok) throw new Error('Session creation failed: ' + res.status);
+    // Proxied through server.js so the API key never touches the browser.
+    const res = await fetch('/api/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ participantName: 'Citizen' }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error('Session creation failed: ' + res.status +
+        (body.error ? ' — ' + body.error : ''));
+    }
     const data = await res.json();
     saveSession(data);
     return data;
