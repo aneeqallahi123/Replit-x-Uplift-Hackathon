@@ -370,16 +370,47 @@
            flow.serviceKey === 'international_driving_license';
   }
 
+  // A flow older than this is stale — a leftover from an earlier run
+  // would otherwise make the agent demand guide_next_step on a freshly
+  // opened page and point at the wrong thing.
+  const FLOW_TTL_MS = 30 * 60 * 1000;
+
+  // Two advances closer together than this are treated as the same
+  // advance. A navigating step emits both a [CLICK] and a [PAGE UPDATE]
+  // and they can arrive out of order, so the agent may call
+  // guide_next_step twice — without this the flow skips a step and
+  // points at the wrong element.
+  const ADVANCE_DEBOUNCE_MS = 500;
+
   function loadFlow() {
+    let flow;
     try {
-      return JSON.parse(sessionStorage.getItem(FLOW_STORAGE_KEY));
+      flow = JSON.parse(sessionStorage.getItem(FLOW_STORAGE_KEY));
     } catch (e) { return null; }
+    if (!flow) return null;
+    if (flow.startedAt && (Date.now() - flow.startedAt) > FLOW_TTL_MS) {
+      console.warn('[Maryam] Discarding stale guided flow (started',
+        Math.round((Date.now() - flow.startedAt) / 60000), 'min ago)');
+      clearFlow();
+      return null;
+    }
+    return flow;
   }
   function saveFlow(flow) {
     sessionStorage.setItem(FLOW_STORAGE_KEY, JSON.stringify(flow));
   }
   function clearFlow() {
     sessionStorage.removeItem(FLOW_STORAGE_KEY);
+  }
+
+  // The single place stepIndex moves forward. Stamps lastAdvancedAt so a
+  // duplicate guide_next_step arriving right behind this one is debounced
+  // instead of skipping a step.
+  function advanceFlow(flow) {
+    flow.stepIndex += 1;
+    flow.lastAdvancedAt = Date.now();
+    saveFlow(flow);
+    return flow;
   }
 
   // First step index that lives on the given page.
@@ -713,7 +744,8 @@
 
   // Executes the flow's current step and advances state on the
   // citizen's click. Detects page mismatches and re-anchors.
-  async function executeCurrentFlowStep(isRetryAfterMismatch) {
+  async function executeCurrentFlowStep(isRetryAfterMismatch, opts) {
+    opts = opts || {};
     const flow = loadFlow();
     if (!flow) {
       return {
@@ -731,6 +763,23 @@
         completed: true,
         presentationInstructions:
           'Guided flow mukammal ho gaya hai. Kya aur madad chahiye?',
+      };
+    }
+
+    // ── Double-advance guard ────────────────────────────────────────
+    // A duplicate guide_next_step arriving right behind an advance gets
+    // the CURRENT step back, unchanged, instead of pushing the flow one
+    // step further and pointing at the wrong element.
+    if (!opts.skipDebounce && flow.lastAdvancedAt &&
+        (Date.now() - flow.lastAdvancedAt) < ADVANCE_DEBOUNCE_MS) {
+      console.warn('[Maryam] Debounced duplicate advance at step', step.id);
+      return {
+        active: true,
+        step: step.id,
+        debounced: true,
+        presentationInstructions:
+          'Pichla qadam abhi abhi mukammal hua hai. Ek lamha rukein aur ' +
+          'phir guide_next_step() dobara call karein.',
       };
     }
 
@@ -757,7 +806,7 @@
       );
       flow.stepIndex = reAnchored;
       saveFlow(flow);
-      const result = await executeCurrentFlowStep(true);
+      const result = await executeCurrentFlowStep(true, { skipDebounce: true });
       result.page_mismatch_recovered = true;
       result.note = 'User was on ' + currentPage + ' instead of ' + step.page +
         '; flow re-anchored to step "' + FLOW_STEPS[reAnchored].id + '".';
@@ -790,9 +839,8 @@
 
       if (missing.length === 0) {
         // All fields filled — advance to the captcha step.
-        flow.stepIndex += 1;
-        saveFlow(flow);
-        return executeCurrentFlowStep(isRetryAfterMismatch);
+        advanceFlow(flow);
+        return executeCurrentFlowStep(isRetryAfterMismatch, { skipDebounce: true });
       }
 
       const apply = SITE_CONFIG.apply;
@@ -823,9 +871,8 @@
       const captcha = getCaptchaState();
       if (captcha.correct) {
         // Already answered correctly — advance immediately.
-        flow.stepIndex += 1;
-        saveFlow(flow);
-        return executeCurrentFlowStep(isRetryAfterMismatch);
+        advanceFlow(flow);
+        return executeCurrentFlowStep(isRetryAfterMismatch, { skipDebounce: true });
       }
 
       let wrapper;
@@ -958,8 +1005,7 @@
       if (!current) return;
       // Only advance if nothing else already moved past this step.
       if (current.stepIndex === flow.stepIndex) {
-        current.stepIndex += 1;
-        saveFlow(current);
+        advanceFlow(current);
       }
       if (step.navigates) {
         const saved = loadSavedSession();
