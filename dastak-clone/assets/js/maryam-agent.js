@@ -45,13 +45,22 @@
   // CRITICAL #2: when a step completes, do NOT thank or praise the
   // citizen for the previous click ("shabash", "bohat acha", etc.) before
   // moving on. Go straight to the next action: "Ab agla qadam yeh hai: ...".
+  //
+  // CRITICAL #3: services differ in their fields, validation, and
+  // whether they even have a captcha — never assume one service's form
+  // looks like another's. get_service_journey(key) is the source of
+  // truth for exactly what a service/quick-action needs.
   const GUIDED_FLOW_RULES =
     'CRITICAL: (1) Every time you point at or highlight something, you ' +
     'MUST speak the matching line from presentationInstructions in that ' +
     'same turn — never highlight silently and wait for the citizen to ' +
     'ask what happened. (2) After the citizen completes a step, do not ' +
     'thank or praise them for it — go straight to the next instruction ' +
-    '("Ab agla qadam yeh hai: ...").';
+    '("Ab agla qadam yeh hai: ..."). (3) ALWAYS call ' +
+    'get_service_journey(key) before start_service/start_quick_action — ' +
+    'it tells you the exact fields, their order, whether a captcha ' +
+    'exists, and which fields need the citizen\'s own manual action ' +
+    '(file uploads) — never assume one service\'s form looks like another\'s.';
 
   const SITE_CONFIG = {
 
@@ -192,115 +201,397 @@
           requires:     'mode must be selected first',
         },
       ],
+      // 3 quick-action panels next to the "DLIMS Services" header — no
+      // service card needed. Same shape as `elements` above so intent
+      // routing works the same way; use_tool is start_quick_action, not
+      // start_service.
+      quick_actions: [
+        {
+          action_key:  'track_application',
+          element_id:  '[data-bs-target="#trackdlimsOffcanvas"]',
+          label_en:    'Track Application',
+          label_ur:    'درخواست ٹریک کریں',
+          triggers_ur: ['application track karo', 'mera application kahan hai', 'status check karo'],
+          use_tool:    'start_quick_action',
+        },
+        {
+          action_key:  'e_license',
+          element_id:  '[data-bs-target="#eLicenseOffcanvas"]',
+          label_en:    'e-License',
+          label_ur:    'ای-لائسنس',
+          triggers_ur: ['e-license banao', 'digital license chahiye', 'e license generate karo'],
+          use_tool:    'start_quick_action',
+        },
+        {
+          action_key:  'verify_license',
+          element_id:  '[data-bs-target="#VerifyOffcanvas"]',
+          label_en:    'Verify License',
+          label_ur:    'لائسنس تصدیق کریں',
+          triggers_ur: ['license verify karo', 'license check karo ke asli hai ya nahi'],
+          use_tool:    'start_quick_action',
+        },
+      ],
     },
 
     apply: {
       page:     'apply',
-      service:  'renewal_driving_license',
-      formType: 'renewal-license',
       instruction: GUIDED_FLOW_RULES + ' ' +
-                   'Use fill_field() for each field, in order. ' +
-                   'Always confirm value verbally before filling. ' +
-                   'After all 5 fields are filled, call guide_next_step() — ' +
-                   'it highlights the captcha itself (the citizen types the ' +
-                   'answer, you NEVER say it aloud) and then the submit ' +
-                   'button. Keep calling guide_next_step() and speaking its ' +
+                   'Fields differ per service — you already called ' +
+                   'get_service_journey(service_key) before start_service, ' +
+                   'so you have the exact field list, order, and validation ' +
+                   'for whichever service is active. Use fill_field() for ' +
+                   'each field in that order; always confirm the value ' +
+                   'verbally before filling, except for file-upload fields ' +
+                   '(the citizen must pick those themselves — never invent ' +
+                   'a file). Once every required field is satisfied, call ' +
+                   'guide_next_step() — it handles the captcha itself if ' +
+                   'the journey has one (auto-skipped when it does not, ' +
+                   'e.g. Learner License) and then the submit button. Keep ' +
+                   'calling guide_next_step() and speaking its ' +
                    'presentationInstructions until the flow completes. ' +
                    'Do NOT call the standalone point-and-wait tool on this ' +
                    'page — the guided flow owns the captcha and submit steps.',
-      fields: [
-        {
-          order:      1,
-          field_id:   'fCnic',
-          label_en:   'CNIC',
-          label_ur:   'شناختی کارڈ نمبر',
-          ask_ur:     'Aapka CNIC number kya hai?',
-          confirm_ur: 'Kya aapka CNIC {value} hai?',
-          type:       'text',
-          validation: 'exactly 13 digits, no dashes or spaces',
-        },
-        {
-          order:      2,
-          field_id:   'fLicenseNo',
-          label_en:   'License Number',
-          label_ur:   'لائسنس نمبر',
-          ask_ur:     'Aapka driving license number kya hai?',
-          confirm_ur: 'License number {value} hai?',
-          type:       'text',
-          validation: 'non-empty string',
-        },
-        {
-          order:      3,
-          field_id:   'fIssuanceDate',
-          label_en:   'License Issuance Date',
-          label_ur:   'لائسنس جاری ہونے کی تاریخ',
-          ask_ur:     'License kab issue hua tha? ' +
-                      'Saal, mahina aur din batayein.',
-          confirm_ur: 'Issuance date {value} hai?',
-          type:       'date',
-          format:     'YYYY-MM-DD',
-          validation: 'real past date',
-        },
-        {
-          order:      4,
-          field_id:   'fDuration',
-          label_en:   'Renewal Duration',
-          label_ur:   'رینیوول کی مدت',
-          ask_ur:     'Kitne saal ke liye renew karna hai?',
-          type:       'select',
-          options:    [
-            'For 1 Year',
-            'For 2 Years',
-            'For 3 Years',
-            'For 4 Years',
-            'For 5 Years',
-          ],
-          options_ur: [
-            'ek saal / 1 year = For 1 Year',
-            'do saal / 2 years = For 2 Years',
-            'teen saal / 3 years = For 3 Years',
-            'chaar saal / 4 years = For 4 Years',
-            'paanch saal / 5 years = For 5 Years',
-          ],
-        },
-        {
-          order:      5,
-          field_id:   'fPossession',
-          label_en:   'Is Old License in Possession',
-          label_ur:   'کیا پرانا لائسنس موجود ہے',
-          ask_ur:     'Kya aapka purana license aapke paas hai?',
-          type:       'select',
-          options:    [
-            'Yes, in my possession',
-            "No, it's lost",
-          ],
-          options_ur: [
-            'haan / yes = Yes, in my possession',
-            "nahi / no = No, it's lost",
-          ],
-        },
-      ],
-      postFieldSteps: [
-        {
-          step:           'captcha',
-          element_id:     '.math-captcha-wrapper',
-          label_en:       'Math Captcha',
-          label_ur:       'ریاضی کا سوال',
-          instruction_ur: 'Ek chota sa math sawaal hai. ' +
-                          'Main pointer se dikhaunga, ' +
-                          'aap khud jawab likhein.',
-        },
-        {
-          step:           'submit',
-          element_id:     '#btnSubmitApplication',
-          label_en:       'Submit Application',
-          label_ur:       'درخواست جمع کریں',
-          instruction_ur: 'Submit karne se pehle confirm karein.',
-        },
-      ],
     },
 
   };
+
+  // -------------------------------------------------------------------
+  // SECTION 2B — Service & quick-action "journeys"
+  //
+  // A journey is the single source of truth for a service's or quick
+  // action's exact fields, validation, and captcha behavior — ported
+  // directly from apply.js's/services.js's real DOM structure. It backs
+  // BOTH the get_service_journey RPC tool (what the agent can ask for on
+  // demand) and the internal flow engine (what actually drives
+  // fill_field/computeMissingFields) — one source of truth, not two.
+  // -------------------------------------------------------------------
+  const FORM_FIELD_TEMPLATES = {
+    // formType 'new' — Learner Driving License (renderNewForm in apply.js).
+    // The 8 fields with no `id` attribute in that form (Emergency Contact,
+    // Gender, Height, Citizen Type, Vehicle Type, Nationality, Blood
+    // Group, Any Disability) are deliberately excluded — apply.js never
+    // validates them on submit, so skipping them changes nothing
+    // observable, and reaching them would need fragile label-text/
+    // position matching for zero functional benefit.
+    new: [
+      { order: 1, field_id: 'fCnic', type: 'text', required: true,
+        label_en: 'CNIC', label_ur: 'شناختی کارڈ نمبر',
+        ask_ur: 'Aapka CNIC number kya hai?', confirm_ur: 'CNIC {value} hai?',
+        validation: 'exactly 13 digits, no dashes or spaces' },
+      { order: 2, field_id: 'fName', type: 'text', required: true,
+        label_en: 'Full Name', label_ur: 'پورا نام',
+        ask_ur: 'Aapka pura naam kya hai?', confirm_ur: 'Naam {value} hai?' },
+      { order: 3, field_id: 'fFather', type: 'text', required: true,
+        label_en: 'Father / Husband Name', label_ur: 'والد / شوہر کا نام',
+        ask_ur: 'Aapke walid ya shohar ka naam kya hai?',
+        confirm_ur: 'Walid/shohar ka naam {value} hai?' },
+      { order: 4, field_id: 'fDob', type: 'date', format: 'YYYY-MM-DD', required: true,
+        label_en: 'Date of Birth', label_ur: 'تاریخ پیدائش',
+        ask_ur: 'Aapki tareekh-e-paidaish kya hai? Saal, mahina, din batayein.',
+        confirm_ur: 'DOB {value} hai?', validation: 'YYYY-MM-DD format' },
+      { order: 5, field_id: 'fPhone', type: 'text', required: true,
+        label_en: 'Phone Number', label_ur: 'فون نمبر',
+        ask_ur: 'Aapka phone number kya hai?', confirm_ur: 'Phone number {value} hai?' },
+
+      { order: 6, field_id: 'permProvince', type: 'select', required: true,
+        options: ['Punjab', 'Sindh', 'Khyber Pakhtunkhwa', 'Balochistan', 'Islamabad', 'Gilgit-Baltistan', 'Azad Kashmir'],
+        label_en: 'Permanent Address — Province', label_ur: 'مستقل پتہ — صوبہ',
+        ask_ur: 'Aapka mustaqil pata kis province mein hai?',
+        confirm_ur: 'Province {value} hai?' },
+      { order: 7, field_id: 'permDistrict', type: 'select', required: true,
+        dependsOn: 'permProvince',
+        label_en: 'Permanent Address — District', label_ur: 'مستقل پتہ — ضلع',
+        ask_ur: 'Kis district mein?', confirm_ur: 'District {value} hai?',
+        validation: 'must be filled AFTER permProvince — its options are populated live from the chosen province' },
+      { order: 8, field_id: 'permAddress', type: 'text', required: true,
+        label_en: 'Permanent Address', label_ur: 'مستقل پتہ',
+        ask_ur: 'Ghar ka pura pata batayein — makan number, gali, shehar.',
+        confirm_ur: 'Pata {value} hai?' },
+
+      { order: 9, field_id: 'sameAsAbove', type: 'checkbox', required: false,
+        label_en: 'Current address same as permanent', label_ur: 'موجودہ پتہ مستقل پتے جیسا ہے',
+        ask_ur: 'Kya aapka mojooda pata mustaqil pate jaisa hi hai?',
+        validation: 'when true, currProvince/currDistrict/currAddress are auto-filled and no longer required' },
+      { order: 10, field_id: 'currProvince', type: 'select', required: true,
+        skipWhenFieldEquals: { field: 'sameAsAbove', equals: true },
+        options: ['Punjab', 'Sindh', 'Khyber Pakhtunkhwa', 'Balochistan', 'Islamabad', 'Gilgit-Baltistan', 'Azad Kashmir'],
+        label_en: 'Current Address — Province', label_ur: 'موجودہ پتہ — صوبہ',
+        ask_ur: 'Mojooda pata kis province mein hai?', confirm_ur: 'Province {value} hai?' },
+      { order: 11, field_id: 'currDistrict', type: 'select', required: true,
+        dependsOn: 'currProvince',
+        skipWhenFieldEquals: { field: 'sameAsAbove', equals: true },
+        label_en: 'Current Address — District', label_ur: 'موجودہ پتہ — ضلع',
+        ask_ur: 'Kis district mein?', confirm_ur: 'District {value} hai?' },
+      { order: 12, field_id: 'currAddress', type: 'text', required: true,
+        skipWhenFieldEquals: { field: 'sameAsAbove', equals: true },
+        label_en: 'Current Address', label_ur: 'موجودہ پتہ',
+        ask_ur: 'Mojooda pata batayein.', confirm_ur: 'Pata {value} hai?' },
+
+      { order: 13, field_id: 'cnicFrontInput', type: 'file', required: true,
+        dropzoneSelector: '#cnicFrontZone',
+        label_en: 'CNIC Front Photo', label_ur: 'شناختی کارڈ کا اگلا حصہ',
+        validation: 'citizen must pick a real file themselves — the agent points and waits, never fabricates one' },
+      { order: 14, field_id: 'cnicBackInput', type: 'file', required: true,
+        dropzoneSelector: '#cnicBackZone',
+        label_en: 'CNIC Back Photo', label_ur: 'شناختی کارڈ کا پچھلا حصہ' },
+
+      { order: 15, field_id: 'certifyCheck', type: 'checkbox', required: true, mustBeChecked: true,
+        label_en: 'Certification checkbox', label_ur: 'تصدیقی خانہ',
+        ask_ur: 'Kya aap tasdeeq karte hain ke di gayi tamam maloomat sahi hai?' },
+    ],
+
+    'renewal-simple': [
+      { order: 1, field_id: 'fCnic', type: 'text', required: true,
+        label_en: 'CNIC', label_ur: 'شناختی کارڈ نمبر',
+        ask_ur: 'Aapka CNIC number kya hai?', confirm_ur: 'CNIC {value} hai?',
+        validation: 'exactly 13 digits, no dashes or spaces' },
+      { order: 2, field_id: 'fDob', type: 'date', format: 'YYYY-MM-DD', required: true,
+        label_en: 'Date of Birth', label_ur: 'تاریخ پیدائش',
+        ask_ur: 'Aapki tareekh-e-paidaish kya hai?', confirm_ur: 'DOB {value} hai?',
+        validation: 'YYYY-MM-DD format' },
+    ],
+
+    'renewal-license': [
+      { order: 1, field_id: 'fCnic', label_en: 'CNIC', label_ur: 'شناختی کارڈ نمبر',
+        ask_ur: 'Aapka CNIC number kya hai?', confirm_ur: 'Kya aapka CNIC {value} hai?',
+        type: 'text', required: true, validation: 'exactly 13 digits, no dashes or spaces' },
+      { order: 2, field_id: 'fLicenseNo', label_en: 'License Number', label_ur: 'لائسنس نمبر',
+        ask_ur: 'Aapka driving license number kya hai?', confirm_ur: 'License number {value} hai?',
+        type: 'text', required: true, validation: 'non-empty string' },
+      { order: 3, field_id: 'fIssuanceDate', label_en: 'License Issuance Date', label_ur: 'لائسنس جاری ہونے کی تاریخ',
+        ask_ur: 'License kab issue hua tha? Saal, mahina aur din batayein.',
+        confirm_ur: 'Issuance date {value} hai?', type: 'date', format: 'YYYY-MM-DD',
+        required: true, validation: 'real past date' },
+      { order: 4, field_id: 'fDuration', label_en: 'Renewal Duration', label_ur: 'رینیوول کی مدت',
+        ask_ur: 'Kitne saal ke liye renew karna hai?', type: 'select', required: true,
+        options: ['For 1 Year', 'For 2 Years', 'For 3 Years', 'For 4 Years', 'For 5 Years'],
+        options_ur: [
+          'ek saal / 1 year = For 1 Year', 'do saal / 2 years = For 2 Years',
+          'teen saal / 3 years = For 3 Years', 'chaar saal / 4 years = For 4 Years',
+          'paanch saal / 5 years = For 5 Years',
+        ] },
+      { order: 5, field_id: 'fPossession', label_en: 'Is Old License in Possession', label_ur: 'کیا پرانا لائسنس موجود ہے',
+        ask_ur: 'Kya aapka purana license aapke paas hai?', type: 'select', required: true,
+        options: ['Yes, in my possession', "No, it's lost"],
+        options_ur: ['haan / yes = Yes, in my possession', "nahi / no = No, it's lost"] },
+    ],
+
+    'duplicate-license': [
+      { order: 1, field_id: 'fCnic', label_en: 'CNIC', label_ur: 'شناختی کارڈ نمبر',
+        ask_ur: 'Aapka CNIC number kya hai?', confirm_ur: 'Kya aapka CNIC {value} hai?',
+        type: 'text', required: true, validation: 'exactly 13 digits, no dashes or spaces' },
+      { order: 2, field_id: 'fLicenseNo', label_en: 'License Number', label_ur: 'لائسنس نمبر',
+        ask_ur: 'Aapka driving license number kya hai?', confirm_ur: 'License number {value} hai?',
+        type: 'text', required: true, validation: 'non-empty string' },
+      { order: 3, field_id: 'fIssuanceDate', label_en: 'License Issuance Date', label_ur: 'لائسنس جاری ہونے کی تاریخ',
+        ask_ur: 'License kab issue hua tha? Saal, mahina aur din batayein.',
+        confirm_ur: 'Issuance date {value} hai?', type: 'date', format: 'YYYY-MM-DD',
+        required: true, validation: 'real past date' },
+    ],
+  };
+
+  // One entry per real service_key (matches SITE_CONFIG.services.elements
+  // and services-data.js's SERVICES keys). hasCaptcha:false only for the
+  // 'new' formType — renderNewForm() never includes the captcha markup.
+  const SERVICE_JOURNEYS = {
+    learner_driving_license: {
+      serviceKey: 'learner_driving_license', formType: 'new',
+      label_en: 'Learner Driving License',
+      hasCaptcha: false, captchaSelector: null,
+      submitSelector: '#btnSubmitApplication',
+      fields: FORM_FIELD_TEMPLATES.new,
+      decorativeFieldsNote: [
+        'Emergency Contact Number', 'Gender', 'Height', 'Citizen Type',
+        'Vehicle Type', 'Nationality', 'Blood Group', 'Any Disability', 'Profile Picture',
+      ],
+    },
+    renewal_learner_driving_license: {
+      serviceKey: 'renewal_learner_driving_license', formType: 'renewal-simple',
+      label_en: 'Renewal of Learners Driving License',
+      hasCaptcha: true, captchaSelector: '.math-captcha-wrapper',
+      submitSelector: '#btnSubmitApplication',
+      fields: FORM_FIELD_TEMPLATES['renewal-simple'],
+    },
+    renewal_driving_license: {
+      serviceKey: 'renewal_driving_license', formType: 'renewal-license',
+      label_en: 'Renewal of Regular License',
+      hasCaptcha: true, captchaSelector: '.math-captcha-wrapper',
+      submitSelector: '#btnSubmitApplication',
+      fields: FORM_FIELD_TEMPLATES['renewal-license'],
+    },
+    international_driving_license: {
+      serviceKey: 'international_driving_license', formType: 'renewal-license',
+      label_en: 'Renewal International Driving License',
+      hasCaptcha: true, captchaSelector: '.math-captcha-wrapper',
+      submitSelector: '#btnSubmitApplication',
+      fields: FORM_FIELD_TEMPLATES['renewal-license'],
+    },
+    duplicate_driving_license: {
+      serviceKey: 'duplicate_driving_license', formType: 'duplicate-license',
+      label_en: 'Duplicate Driving License',
+      hasCaptcha: true, captchaSelector: '.math-captcha-wrapper',
+      submitSelector: '#btnSubmitApplication',
+      fields: FORM_FIELD_TEMPLATES['duplicate-license'],
+    },
+    international_driving_license_duplicate: {
+      serviceKey: 'international_driving_license_duplicate', formType: 'duplicate-license',
+      label_en: 'Duplicate International Driving License',
+      hasCaptcha: true, captchaSelector: '.math-captcha-wrapper',
+      submitSelector: '#btnSubmitApplication',
+      fields: FORM_FIELD_TEMPLATES['duplicate-license'],
+    },
+  };
+
+  // The 3 "quick action" panels on services.html — NOT page navigations,
+  // just a Bootstrap offcanvas opening on the same page. Each has its own
+  // independent captcha instance, so every selector here (including the
+  // captcha) is scoped inside the panel's offcanvas id — never a bare
+  // document-wide `.math-captcha-wrapper` query, since all 3 panels'
+  // markup exists in the DOM simultaneously (only one is visible at a time).
+  const QUICK_ACTION_JOURNEYS = {
+    track_application: {
+      actionKey: 'track_application', label_en: 'Track Application',
+      offcanvasId: 'trackdlimsOffcanvas',
+      fields: [
+        { order: 1, field_id: 'trackCnic', selector: '#trackdlimsOffcanvas input[name="identity_number"]',
+          type: 'text', required: false, label_en: 'CNIC', label_ur: 'شناختی کارڈ نمبر',
+          ask_ur: 'Aapka CNIC number kya hai?', confirm_ur: 'CNIC {value} hai?' },
+      ],
+      hasCaptcha: true, captchaSelector: '#trackdlimsOffcanvas .math-captcha-wrapper',
+      actionButtonSelector: '#generateTrackButton',
+      demoNoteSelector: '#trackDemoNote',
+      demoNoteText_ur: 'Yeh demo hai — koi asli application yahan track nahi ho rahi, bas UI dikhane ke liye hai.',
+    },
+    e_license: {
+      actionKey: 'e_license', label_en: 'e-License',
+      offcanvasId: 'eLicenseOffcanvas',
+      fields: [
+        { order: 1, field_id: 'regularLicense', selector: '#regularLicense', type: 'radio', group: 'licenseType',
+          required: false, label_en: 'Regular License', label_ur: 'ریگولر لائسنس' },
+        { order: 2, field_id: 'internationalLicense', selector: '#internationalLicense', type: 'radio', group: 'licenseType',
+          required: false, label_en: 'International License', label_ur: 'انٹرنیشنل لائسنس' },
+        { order: 3, field_id: 'cnicPassportInput', type: 'text', required: true,
+          label_en: 'CNIC / Passport Number (label follows the License Type choice above)',
+          ask_ur: 'Aapka CNIC ya passport number kya hai?', confirm_ur: '{value} hai?' },
+        { order: 4, field_id: 'eLicenseDob', selector: '#eLicenseOffcanvas input[name="dob"]',
+          type: 'text', format: 'YYYY-MM-DD', required: true,
+          label_en: 'Date of Birth', ask_ur: 'Aapki tareekh-e-paidaish kya hai?', confirm_ur: 'DOB {value} hai?' },
+      ],
+      hasCaptcha: true, captchaSelector: '#eLicenseOffcanvas .math-captcha-wrapper',
+      actionButtonSelector: '#generateLicenseButton',
+      demoNoteSelector: '#eLicenseDemoNote',
+      demoNoteText_ur: 'Yeh demo hai — koi asli e-License nahi banti, backend se connect nahi hai.',
+    },
+    verify_license: {
+      actionKey: 'verify_license', label_en: 'Verify License',
+      offcanvasId: 'VerifyOffcanvas',
+      fields: [
+        { order: 1, field_id: 'verifyregularLicense', selector: '#verifyregularLicense', type: 'radio', group: 'verifylicenseType',
+          required: false, label_en: 'Regular License', label_ur: 'ریگولر لائسنس' },
+        { order: 2, field_id: 'verifyinternationalLicense', selector: '#verifyinternationalLicense', type: 'radio', group: 'verifylicenseType',
+          required: false, label_en: 'International License', label_ur: 'انٹرنیشنل لائسنس' },
+        { order: 3, field_id: 'verifyCnicPassport', selector: '#VerifyOffcanvas input[name="verify_identity_number"]',
+          type: 'text', required: true, label_en: 'CNIC / Passport Number',
+          ask_ur: 'Aapka CNIC ya passport number kya hai?', confirm_ur: '{value} hai?' },
+        { order: 4, field_id: 'verifyLicenseNo',
+          // The only field in this whole config with neither an id nor a
+          // name in services.html — located positionally as the 4th
+          // direct div child of the panel's .row.g-3 (confirmed against
+          // the real markup: error-alert, radios, CNIC, License Number).
+          // Fragile to a markup reorder; correct given this feature may
+          // only touch maryam-agent.js.
+          selector: '#VerifyOffcanvas .row.g-3 > div:nth-of-type(4) input',
+          type: 'text', required: true, label_en: 'License Number',
+          ask_ur: 'License number kya hai?', confirm_ur: 'License number {value} hai?' },
+      ],
+      hasCaptcha: true, captchaSelector: '#VerifyOffcanvas .math-captcha-wrapper',
+      actionButtonSelector: '#verifyLicenseButton',
+      demoNoteSelector: '#verifyDemoNote',
+      demoNoteText_ur: 'Yeh demo hai — koi asli license database nahi hai, kuch verify nahi ho raha.',
+    },
+  };
+
+  // Looks a key up in either journey map — the agent's mental model is
+  // "give me the journey for X," not "which kind of X is this."
+  function getJourneyByKey(key) {
+    return SERVICE_JOURNEYS[key] || QUICK_ACTION_JOURNEYS[key] || null;
+  }
+
+  // Resolves whichever journey is "in play" right now: the active guided
+  // service flow, the active quick-action flow, or (fallback) the service
+  // named in apply.html's own URL — so fill_field and friends don't need
+  // to be told twice which journey applies. loadQuickActionFlow is defined
+  // later in this file (function hoisting makes the forward reference safe).
+  function getActiveJourney() {
+    const flow = loadFlow();
+    if (flow && SERVICE_JOURNEYS[flow.serviceKey]) return SERVICE_JOURNEYS[flow.serviceKey];
+    const qa = loadQuickActionFlow();
+    if (qa && QUICK_ACTION_JOURNEYS[qa.actionKey]) return QUICK_ACTION_JOURNEYS[qa.actionKey];
+    if (getCurrentPageKey() === 'apply') {
+      const params = new URLSearchParams(window.location.search);
+      const serviceKey = params.get('service');
+      if (serviceKey && SERVICE_JOURNEYS[serviceKey]) return SERVICE_JOURNEYS[serviceKey];
+    }
+    return null;
+  }
+
+  // Reads a field's current DOM state via its explicit selector or the
+  // default '#'+field_id — the single place that knows how to inspect a
+  // live element regardless of field type.
+  function readFieldLiveValue(field) {
+    const el = document.querySelector(field.selector || ('#' + field.field_id));
+    if (!el) return { exists: false, value: '', checked: false, fileCount: 0 };
+    return {
+      exists: true,
+      value: el.value !== undefined ? el.value : '',
+      checked: !!el.checked,
+      fileCount: (el.files && el.files.length) || 0,
+    };
+  }
+
+  function isFieldSatisfied(field) {
+    const live = readFieldLiveValue(field);
+    switch (field.type) {
+      case 'checkbox':
+        // Optional toggles (e.g. sameAsAbove) never block advancing —
+        // only ones explicitly flagged mustBeChecked (e.g. certifyCheck) do.
+        return field.mustBeChecked ? live.checked === true : true;
+      case 'radio':
+        return true; // every radio group on this site ships with a default-checked option
+      case 'file':
+        return live.fileCount > 0;
+      case 'text':
+      case 'date':
+      case 'select':
+      default:
+        return !!String(live.value || '').trim();
+    }
+  }
+
+  // Mirrors apply.js's real validation semantics: a field whose
+  // skipWhenFieldEquals condition matches (e.g. sameAsAbove checked) is
+  // removed from what's required — exactly like the site's own disabling
+  // behavior, not just visually but for what blocks advancing.
+  function computeMissingFields(journey) {
+    if (!journey || !journey.fields) return [];
+    return journey.fields
+      .filter(function (f) {
+        if (f.required === false) return false;
+        if (f.skipWhenFieldEquals) {
+          const dep = journey.fields.find(function (x) { return x.field_id === f.skipWhenFieldEquals.field; });
+          if (dep && readFieldLiveValue(dep).checked === f.skipWhenFieldEquals.equals) return false;
+        }
+        return !isFieldSatisfied(f);
+      })
+      .map(function (f) { return f.field_id; });
+  }
+
+  // Coerces a spoken/typed value into a boolean for checkbox fields —
+  // accepts English and Roman Urdu yes/no phrasing.
+  function coerceBoolean(value) {
+    const v = String(value).trim().toLowerCase();
+    return v === 'true' || v === 'yes' || v === 'haan' || v === 'han' || v === '1';
+  }
 
   // -------------------------------------------------------------------
   // SECTION 3 — Page detection
@@ -407,14 +698,19 @@
     },
   ];
 
-  // Form field IDs the guided renewal flow fills (renewal-license form).
-  const RENEWAL_FORM_FIELD_IDS =
-    ['fCnic', 'fLicenseNo', 'fIssuanceDate', 'fDuration', 'fPossession'];
-
-  // Reads the live captcha state: answered correctly or not. The
-  // expected answer is exposed by apply.js on wrapper.dataset.answer.
-  function getCaptchaState() {
-    const wrapper = document.querySelector('.math-captcha-wrapper');
+  // Reads the live captcha state: answered correctly or not. Accepts an
+  // optional wrapper element or CSS selector — defaults to the page-wide
+  // `.math-captcha-wrapper` (apply.html has exactly one), but services.html
+  // has 3 offcanvas panels whose captchas all share that class, so quick
+  // actions must pass their own journey.captchaSelector explicitly. The
+  // expected answer is exposed by both apply.js and services.js on
+  // wrapper.dataset.answer.
+  function getCaptchaState(wrapperOrSelector) {
+    const wrapper = !wrapperOrSelector
+      ? document.querySelector('.math-captcha-wrapper')
+      : (typeof wrapperOrSelector === 'string'
+          ? document.querySelector(wrapperOrSelector)
+          : wrapperOrSelector);
     if (!wrapper) return { present: false, correct: false, answered: false };
     const input = wrapper.querySelector('.math-captcha-input');
     const val = input ? input.value.trim() : '';
@@ -426,14 +722,11 @@
     };
   }
 
-  // Guided form-filling metadata only exists for the renewal-license
-  // form. Other services reach the apply page with different fields.
+  // Guided form-filling metadata now exists for every real service — this
+  // is trivially true for all 6 SERVICE_JOURNEYS keys, replacing the old
+  // 2-service allowlist.
   function flowHasKnownFormSchema(flow) {
-    if (typeof SERVICES !== 'undefined' && SERVICES[flow.serviceKey]) {
-      return SERVICES[flow.serviceKey].formType === 'renewal-license';
-    }
-    return flow.serviceKey === 'renewal_driving_license' ||
-           flow.serviceKey === 'international_driving_license';
+    return !!SERVICE_JOURNEYS[flow.serviceKey];
   }
 
   // A flow older than this is stale — a leftover from an earlier run
@@ -523,6 +816,35 @@
     }
     // Element may render slightly after DOMContentLoaded (e.g. behind a
     // brief loading state) — give it a short window before giving up.
+    waitForElement(selector, 4000)
+      .then(function (el) { movePointerTo(el); triggerPulse(); })
+      .catch(function () { /* agent's own guide_next_step() will retry */ });
+  }
+
+  // Companion to preRenderPendingFlowStep for quick actions — re-opens
+  // the offcanvas panel and re-highlights the pending phase's target the
+  // instant services.html reloads (e.g. a manual refresh), for the same
+  // reason: don't make the citizen wait for guide_next_step() to react.
+  function preRenderPendingQuickActionStep() {
+    const qa = loadQuickActionFlow();
+    if (!qa || getCurrentPageKey() !== 'services') return;
+    const journey = QUICK_ACTION_JOURNEYS[qa.actionKey];
+    if (!journey) return;
+
+    setNextStep(journey.label_en + ': fill in the details.');
+
+    try {
+      const offcanvasEl = document.getElementById(journey.offcanvasId);
+      if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
+        window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+      }
+    } catch (e) { /* guide_next_step() still works even if this fails */ }
+
+    let selector = null;
+    if (qa.phase === 'captcha') selector = journey.captchaSelector;
+    else if (qa.phase === 'action') selector = journey.actionButtonSelector;
+    if (!selector) return;
+
     waitForElement(selector, 4000)
       .then(function (el) { movePointerTo(el); triggerPulse(); })
       .catch(function () { /* agent's own guide_next_step() will retry */ });
@@ -1211,6 +1533,16 @@
       };
     }
 
+    // Mutually exclusive with guided_flow — see handleStartService/
+    // handleStartQuickAction, which each clear the other's state.
+    const qa = loadQuickActionFlow();
+    if (qa) {
+      live.quick_action = {
+        action_key: qa.actionKey,
+        phase: qa.phase,
+      };
+    }
+
     if (pageKey === 'services') {
       const activeCard = document.querySelector('.service-card-item.active-card');
       live.expanded_service = activeCard
@@ -1224,12 +1556,21 @@
       const params = new URLSearchParams(window.location.search);
       live.service = params.get('service');
       live.mode = params.get('mode');
+      // Reads whichever fields the ACTIVE journey declares (not a fixed
+      // list) — differs per service's form type, including checkboxes
+      // (.checked) and file inputs (upload presence, never file content).
+      const journey = getActiveJourney();
       const values = {};
-      ['fCnic', 'fLicenseNo', 'fIssuanceDate', 'fDuration', 'fPossession']
-        .forEach(function (id) {
-          const el = document.getElementById(id);
-          if (el) values[id] = el.value || '';
+      if (journey) {
+        journey.fields.forEach(function (f) {
+          const lv = readFieldLiveValue(f);
+          if (!lv.exists) return;
+          if (f.type === 'checkbox') values[f.field_id] = lv.checked;
+          else if (f.type === 'file') values[f.field_id] = lv.fileCount > 0 ? 'uploaded' : '';
+          else if (f.type === 'radio') values[f.field_id] = lv.checked ? lv.value : '';
+          else values[f.field_id] = lv.value || '';
         });
+      }
       live.form_values = values;
       live.success_shown =
         !!document.getElementById('successView') &&
@@ -1243,6 +1584,48 @@
     const pageKey = getCurrentPageKey();
     const config = SITE_CONFIG[pageKey] || { page: pageKey, notes: 'No config.' };
     return { ...config, live: buildLiveContext() };
+  }
+
+  // Returns the full journey for a service_key or a quick-action's
+  // action_key — whichever map it's found in. This is the SAME object
+  // the internal flow engine (executeCurrentFlowStep, handleFillField,
+  // computeMissingFields) reads from, so what this tool reports and how
+  // Maryam actually guides can never drift apart.
+  function handleGetServiceJourney(payload) {
+    const key = payload && (payload.key || payload.service_key || payload.action_key);
+    if (!key) {
+      return {
+        found: false,
+        error: 'key missing',
+        presentationInstructions:
+          'Mujhe pata nahi chala kaunsi service ya action ke baare mein ' +
+          'poochha ja raha hai. User se service ka naam dobara poochhein.',
+      };
+    }
+    const journey = getJourneyByKey(key);
+    if (!journey) {
+      return {
+        found: false,
+        error: 'unknown key: ' + key,
+        presentationInstructions:
+          'Yeh service ya action mujhe nahi mili. Key dobara jaanch karein ' +
+          'ya user se poochhein woh kya chahte hain.',
+      };
+    }
+    const isQuickAction = !!QUICK_ACTION_JOURNEYS[key];
+    return {
+      found: true,
+      kind: isQuickAction ? 'quick_action' : 'service',
+      ...journey,
+      presentationInstructions:
+        'Yeh journey ki poori tafseel hai — fields, unka order, aur ' +
+        (journey.hasCaptcha === false ? 'is mein koi captcha nahi hai' : 'ek captcha step hai') + '. ' +
+        (journey.decorativeFieldsNote
+          ? 'Yeh extra fields sirf UI mein hain, bharne ki zaroorat nahi: ' +
+            journey.decorativeFieldsNote.join(', ') + '. '
+          : '') +
+        'Ab ' + (isQuickAction ? 'start_quick_action' : 'start_service') + ' call karein.',
+    };
   }
 
   // Guided flow entry point: initializes the step tracker anchored at
@@ -1264,6 +1647,9 @@
 
     console.log('[Maryam] start_service (guided):', serviceKey, mode);
     showToolBadge('🧭 ' + serviceKey + ' / ' + mode);
+
+    // A service flow and a quick-action flow are mutually exclusive.
+    clearQuickActionFlow();
 
     const currentPage = getCurrentPageKey();
     const flow = {
@@ -1288,6 +1674,296 @@
     }
 
     return result;
+  }
+
+  // -------------------------------------------------------------------
+  // SECTION 6B — Quick-action step runner (Track Application, e-License,
+  // Verify License)
+  //
+  // Structurally separate from the FLOW_STEPS/executeCurrentFlowStep
+  // engine above: FLOW_STEPS is built entirely around page navigation
+  // (`page`, `navigates`, page-mismatch re-anchoring), but quick actions
+  // never navigate — they just open a Bootstrap offcanvas on the current
+  // services.html page and have their own captcha instance scoped to
+  // that panel. Reuses the same primitives (pointAndAwaitClick,
+  // computeMissingFields, getCaptchaState/awaitCaptchaCorrect,
+  // handleFillField) as the service-flow engine above.
+  // -------------------------------------------------------------------
+  const QUICK_ACTION_STORAGE_KEY = 'maryam_quick_action';
+
+  function loadQuickActionFlow() {
+    let qa;
+    try {
+      qa = JSON.parse(sessionStorage.getItem(QUICK_ACTION_STORAGE_KEY));
+    } catch (e) { return null; }
+    if (!qa) return null;
+    if (qa.startedAt && (Date.now() - qa.startedAt) > FLOW_TTL_MS) {
+      console.warn('[Maryam] Discarding stale quick-action flow');
+      clearQuickActionFlow();
+      return null;
+    }
+    return qa;
+  }
+  function saveQuickActionFlow(qa) {
+    sessionStorage.setItem(QUICK_ACTION_STORAGE_KEY, JSON.stringify(qa));
+  }
+  function clearQuickActionFlow() {
+    sessionStorage.removeItem(QUICK_ACTION_STORAGE_KEY);
+  }
+
+  // Quick-action entry point: opens the offcanvas panel and starts at
+  // its first phase. Mutually exclusive with a service guided flow.
+  async function handleStartQuickAction(payload) {
+    const actionKey = payload && payload.action_key;
+    const journey = QUICK_ACTION_JOURNEYS[actionKey];
+    if (!actionKey || !journey) {
+      return {
+        active: false,
+        error: 'unknown action_key: ' + actionKey,
+        presentationInstructions:
+          'Mujhe pata nahi chala kaunsa quick action chahiye. User se ' +
+          'poochhein woh Track Application, e-License, ya Verify License ' +
+          'mein se kya chahte hain.',
+      };
+    }
+    if (getCurrentPageKey() !== 'services') {
+      return {
+        active: false,
+        error: 'wrong page for quick action',
+        presentationInstructions:
+          'Yeh sirf Services page par available hai. Pehle navigate_to_page ' +
+          'se services page par jayein, phir dobara koshish karein.',
+      };
+    }
+
+    console.log('[Maryam] start_quick_action:', actionKey);
+    showToolBadge('🧭 ' + actionKey);
+
+    // A quick-action flow and a service flow are mutually exclusive.
+    clearFlow();
+
+    try {
+      const offcanvasEl = document.getElementById(journey.offcanvasId);
+      if (offcanvasEl && window.bootstrap && window.bootstrap.Offcanvas) {
+        window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+      }
+    } catch (e) {
+      console.warn('[Maryam] Could not open offcanvas for quick action:', actionKey, e);
+    }
+
+    saveQuickActionFlow({
+      actionKey: actionKey,
+      phase: journey.fields.length ? 'fields' : (journey.hasCaptcha ? 'captcha' : 'action'),
+      startedAt: Date.now(),
+    });
+
+    return executeCurrentQuickActionStep();
+  }
+
+  // Executes the quick action's current phase and advances on
+  // completion — mirrors executeCurrentFlowStep's shape but without any
+  // page-navigation/page-mismatch concept, since quick actions never
+  // navigate.
+  async function executeCurrentQuickActionStep() {
+    const qa = loadQuickActionFlow();
+    if (!qa) {
+      return {
+        active: false,
+        presentationInstructions:
+          'Koi quick action active nahi hai. Pehle start_quick_action call karein.',
+      };
+    }
+    const journey = QUICK_ACTION_JOURNEYS[qa.actionKey];
+    if (!journey) {
+      clearQuickActionFlow();
+      return {
+        active: false,
+        presentationInstructions: 'Yeh quick action nahi mili. User se dobara poochhein.',
+      };
+    }
+
+    setNextStep(journey.label_en + ': fill in the details.');
+
+    // ── Fields phase ──────────────────────────────────────────
+    if (qa.phase === 'fields') {
+      const missing = computeMissingFields(journey);
+      if (missing.length === 0) {
+        qa.phase = journey.hasCaptcha ? 'captcha' : 'action';
+        saveQuickActionFlow(qa);
+        return executeCurrentQuickActionStep();
+      }
+      return {
+        active: true,
+        phase: 'fields',
+        fields: journey.fields,
+        remaining_fields: missing,
+        presentationInstructions:
+          journey.label_en + ' form khul gaya hai. Fields ek ek kar ke bharein: ' +
+          'har field ke liye user se value poochhein, verbally confirm karein, ' +
+          'phir fill_field call karein. Abhi yeh fields baqi hain: ' +
+          missing.join(', ') + '. Sab bharne ke baad guide_next_step call ' +
+          'karein — main captcha (agar hai) aur action button khud dikhaungi.',
+      };
+    }
+
+    // ── Captcha phase — same semantics as the service flow's captcha
+    //    step, but scoped to this panel's own offcanvas-local captcha. ──
+    if (qa.phase === 'captcha') {
+      if (journey.hasCaptcha === false) {
+        qa.phase = 'action';
+        saveQuickActionFlow(qa);
+        return executeCurrentQuickActionStep();
+      }
+
+      const captchaSelector = journey.captchaSelector;
+      const captcha = getCaptchaState(captchaSelector);
+      if (captcha.correct) {
+        qa.phase = 'action';
+        saveQuickActionFlow(qa);
+        return executeCurrentQuickActionStep();
+      }
+
+      let wrapper;
+      try {
+        wrapper = await waitForElement(captchaSelector, 3000);
+      } catch (err) {
+        console.error('[Maryam] Quick-action captcha element not found:', err.message);
+        return {
+          active: true,
+          phase: 'captcha',
+          captcha_correct: false,
+          error: err.message,
+          presentationInstructions:
+            'Security sawal panel mein nahi mil raha. User se kahein ke ' +
+            'panel dobara khulwayein, phir guide_next_step dobara call karein.',
+        };
+      }
+
+      movePointerTo(wrapper);
+      triggerPulse();
+      setStatus('Next step: solve the highlighted box');
+      setNextStep('Solve the highlighted math question.');
+
+      const state = await awaitCaptchaCorrect(wrapper, CAPTCHA_TIMEOUT_MS);
+
+      if (state.correct) {
+        hidePointer();
+        setStatus('', false);
+        return {
+          active: true,
+          phase: 'captcha',
+          captcha_correct: true,
+          presentationInstructions:
+            'SPEAK THIS NOW: "Security sawal ka jawab sahi hai. Ab agla ' +
+            'qadam yeh hai: ' + journey.label_en + ' button dabana." — then ' +
+            'immediately call guide_next_step(). Never say the captcha ' +
+            'answer out loud, and do not thank the citizen.',
+        };
+      }
+
+      return {
+        active: true,
+        phase: 'captcha',
+        captcha_correct: false,
+        still_waiting: true,
+        captcha_answered: getCaptchaState(captchaSelector).answered,
+        captcha_question: captcha.question,
+        presentationInstructions:
+          'SPEAK THIS NOW, do not highlight silently — say: "Screen par ' +
+          'security sawal highlight ho gaya hai: ' +
+          (captcha.question || 'chota sa math sawal') + '. Iska jawab khud ' +
+          'box mein type karein." Aap jawab hargiz na batayein. Phir ' +
+          'guide_next_step() dobara call karein.',
+      };
+    }
+
+    // ── Action phase: click the panel's primary button ──────────
+    if (qa.phase === 'action') {
+      const onClicked = function () {
+        const current = loadQuickActionFlow();
+        if (!current) return;
+        if (current.phase === qa.phase) {
+          current.phase = 'done';
+          saveQuickActionFlow(current);
+        }
+      };
+
+      const outcome = await pointAndAwaitClick(journey.actionButtonSelector, {
+        onClicked: onClicked,
+        actionLabel: 'Click "' + journey.label_en + '".',
+      });
+
+      if (outcome.clicked) {
+        return {
+          active: true,
+          phase: 'action',
+          clicked: true,
+          presentationInstructions:
+            'SPEAK THIS RIGHT NOW, in this same turn — do not stay silent: ' +
+            '"Theek hai, ho gaya." — then immediately call guide_next_step() ' +
+            'to confirm the result.',
+        };
+      }
+
+      if (outcome.timed_out) {
+        return {
+          active: true,
+          phase: 'action',
+          clicked: false,
+          still_waiting: true,
+          presentationInstructions:
+            'User ne abhi tak click nahi kiya. Narmi se yaad dilayein ke ' +
+            'screen par jo cheez highlight ho rahi hai uss par click karein. ' +
+            'Phir guide_next_step() dobara call karein.',
+        };
+      }
+
+      console.error('[Maryam] Could not point at quick-action button', journey.actionButtonSelector, outcome.reason);
+      return {
+        active: true,
+        phase: 'action',
+        pointed: false,
+        error: outcome.reason,
+        presentationInstructions:
+          'Button screen par nahi mila. User ko manually us par click ' +
+          'karne mein madad karein, ya guide_next_step dobara call karein.',
+      };
+    }
+
+    // ── Done: confirm the demo note appeared ─────────────────────
+    if (qa.phase === 'done') {
+      const noteEl = document.querySelector(journey.demoNoteSelector);
+      const shown = !!noteEl && noteEl.classList.contains('show');
+      if (shown) {
+        clearQuickActionFlow();
+        setNextStep(null);
+        return {
+          active: false,
+          completed: true,
+          presentationInstructions:
+            'SPEAK THIS NOW: "' + journey.demoNoteText_ur + '" — say it ' +
+            'warmly, as an upfront disclosure, not as a failure. Then ask ' +
+            'if the citizen needs anything else.',
+        };
+      }
+      return {
+        active: true,
+        phase: 'done',
+        still_waiting: true,
+        presentationInstructions:
+          'Abhi tak result nahi aaya. guide_next_step() dobara call karein.',
+      };
+    }
+
+    // Unknown phase — should be unreachable, but never leave the agent
+    // with a rejected tool call.
+    clearQuickActionFlow();
+    return {
+      active: false,
+      error: 'unknown quick-action phase: ' + qa.phase,
+      presentationInstructions:
+        'Ek masla aaya. User se maazrat karein aur dobara koshish karein.',
+    };
   }
 
   // Executes the flow's current step and advances state on the
@@ -1368,9 +2044,12 @@
     // ── Form step (apply page): hand over to fill_field flow ──
     if (step.form) {
       const live = buildLiveContext();
+      const journey = SERVICE_JOURNEYS[flow.serviceKey];
 
       if (!flowHasKnownFormSchema(flow)) {
         // Unknown form schema — guide generically, don't invent fields.
+        // Should be unreachable now that all 6 real services have a
+        // journey; kept as a safety net for an unrecognized service_key.
         return {
           active: true,
           step: 'form',
@@ -1384,10 +2063,7 @@
         };
       }
 
-      const values = (live.form_values) || {};
-      const missing = RENEWAL_FORM_FIELD_IDS.filter(function (id) {
-        return !(values[id] && String(values[id]).trim());
-      });
+      const missing = computeMissingFields(journey);
 
       if (missing.length === 0) {
         // All fields filled — advance to the captcha step.
@@ -1395,20 +2071,20 @@
         return executeCurrentFlowStep(isRetryAfterMismatch, { skipDebounce: true });
       }
 
-      const apply = SITE_CONFIG.apply;
       return {
         active: true,
         step: 'form',
         known_schema: true,
         live: live,
-        fields: apply.fields,
+        fields: journey.fields,
         remaining_fields: missing,
+        decorative_fields_note: journey.decorativeFieldsNote || null,
         presentationInstructions:
           'Application form khul gaya hai. Fields ek ek kar ke bharein: ' +
           'har field ke liye user se value poochhein, verbally confirm karein, ' +
           'phir fill_field call karein. Abhi yeh fields baqi hain: ' +
           missing.join(', ') + '. Sab bharne ke baad guide_next_step call ' +
-          'karein — main captcha aur submit khud dikhaungi.',
+          'karein — main captcha (agar hai) aur submit khud dikhaungi.',
       };
     }
 
@@ -1420,7 +2096,17 @@
     // that was a permanent deadlock. Watch the input instead and only
     // report once the answer is actually correct.
     if (step.captcha) {
-      const captcha = getCaptchaState();
+      const journey = SERVICE_JOURNEYS[flow.serviceKey];
+
+      if (journey && journey.hasCaptcha === false) {
+        // This form type (e.g. Learner License) never includes a captcha
+        // — skip straight to the submit step.
+        advanceFlow(flow);
+        return executeCurrentFlowStep(isRetryAfterMismatch, { skipDebounce: true });
+      }
+
+      const captchaSelector = (journey && journey.captchaSelector) || '.math-captcha-wrapper';
+      const captcha = getCaptchaState(captchaSelector);
       if (captcha.correct) {
         // Already answered correctly — advance immediately.
         advanceFlow(flow);
@@ -1429,7 +2115,7 @@
 
       let wrapper;
       try {
-        wrapper = await waitForElement('.math-captcha-wrapper', 3000);
+        wrapper = await waitForElement(captchaSelector, 3000);
       } catch (err) {
         console.error('[Maryam] Captcha element not found:', err.message);
         return {
@@ -1476,7 +2162,7 @@
         step: 'captcha',
         captcha_correct: false,
         still_waiting: true,
-        captcha_answered: getCaptchaState().answered,
+        captcha_answered: getCaptchaState(captchaSelector).answered,
         captcha_question: captcha.question,
         presentationInstructions:
           'SPEAK THIS NOW, do not highlight silently — say: "Screen par ' +
@@ -1512,9 +2198,11 @@
       const errorBox = document.getElementById('formError');
       const errors = errorBox && !errorBox.classList.contains('d-none')
         ? errorBox.textContent.trim() : '';
-      const captcha = getCaptchaState();
+      const finishJourney = SERVICE_JOURNEYS[flow.serviceKey];
+      const finishCaptchaSelector = (finishJourney && finishJourney.captchaSelector) || '.math-captcha-wrapper';
+      const captcha = getCaptchaState(finishCaptchaSelector);
       const captchaError =
-        document.querySelector('.math-captcha-wrapper .captcha_error');
+        document.querySelector(finishCaptchaSelector + ' .captcha_error');
       const captchaFailed = !captcha.correct ||
         (captchaError && captchaError.style.display !== 'none');
       const failingStepId = captchaFailed && !errors ? 'captcha' : 'form';
@@ -1717,6 +2405,9 @@
 
   async function handleGuideNextStep() {
     showToolBadge('🧭 Next step');
+    // A quick-action flow and a service flow are mutually exclusive —
+    // whichever one is active is the one this call advances.
+    if (loadQuickActionFlow()) return executeCurrentQuickActionStep();
     return executeCurrentFlowStep();
   }
 
@@ -1849,13 +2540,25 @@
     const myOp = ++pointOpSeq;
     if (activePointCancel) activePointCancel('superseded by captcha step');
 
+    // Checks THIS specific wrapper, not the page-wide default — services.html
+    // has multiple offcanvas panels' `.math-captcha-wrapper` elements
+    // coexisting in the DOM at once, so getCaptchaState()'s unscoped
+    // default (the first one in document order) would silently compare
+    // against the wrong panel's answer for every quick action except
+    // whichever one happens to be first.
+    function isThisWrapperCorrect() {
+      const input = wrapper.querySelector('.math-captcha-input');
+      const val = input ? input.value.trim() : '';
+      return val !== '' && Number(val) === Number(wrapper.dataset.answer);
+    }
+
     return new Promise((resolve) => {
       const input = wrapper.querySelector('.math-captcha-input');
       if (!input) {
         return resolve({ correct: false, cancelled: true,
                          reason: 'captcha input not found' });
       }
-      if (getCaptchaState().correct) return resolve({ correct: true });
+      if (isThisWrapperCorrect()) return resolve({ correct: true });
 
       let settled = false;
       let disposed = false;
@@ -1884,7 +2587,7 @@
 
       function onInput() {
         if (myOp !== pointOpSeq) return; // superseded
-        if (!getCaptchaState().correct) return; // wait until it's actually right
+        if (!isThisWrapperCorrect()) return; // wait until it's actually right
         dispose();
         // Redundant secondary signal — harmless if lk.chat is not ingested.
         if (maryamRoom && maryamConnected) {
@@ -2043,6 +2746,98 @@
     });
   }
 
+  // How long a file-upload wait may hold a tool call open. Longer than a
+  // normal click wait — the citizen has to navigate an OS file picker,
+  // not just tap something already on screen.
+  const FILE_WAIT_TIMEOUT_MS = 60000;
+
+  // Sibling of pointAndAwaitClick, for fields the agent cannot fill
+  // itself — file uploads. apply.js's wireDropzone() already adds a
+  // `has-file` class to the dropzone the instant the citizen picks a
+  // real file, so this highlights the dropzone and resolves once that
+  // class appears, instead of waiting for a click. Never fabricates a
+  // file. Shares the same activePointCancel/pointOpSeq plumbing as
+  // pointAndAwaitClick so a new point operation from either function
+  // correctly supersedes the other.
+  //
+  // Returns { satisfied:true, element_id } | { satisfied:false, timed_out:true, element_id }
+  //        | { satisfied:false, cancelled:true, element_id, reason }
+  async function pointAndAwaitCondition(selector, opts) {
+    opts = opts || {};
+    const timeoutMs = opts.timeoutMs === undefined ? FILE_WAIT_TIMEOUT_MS : opts.timeoutMs;
+    const conditionClass = opts.conditionClass || 'has-file';
+
+    const myOp = ++pointOpSeq;
+    if (activePointCancel) activePointCancel('superseded by new point operation');
+
+    let el;
+    try {
+      el = await waitForElement(selector);
+    } catch (err) {
+      console.warn('[Maryam] condition target never appeared:', selector, err.message);
+      return { satisfied: false, cancelled: true, element_id: selector, reason: err.message };
+    }
+    if (myOp !== pointOpSeq) {
+      return { satisfied: false, cancelled: true, element_id: selector,
+               reason: 'superseded while waiting for element' };
+    }
+
+    movePointerTo(el);
+    triggerPulse();
+    setNextStep(opts.actionLabel || ('Complete: ' + selector));
+
+    if (el.classList.contains(conditionClass)) {
+      hidePointer();
+      return { satisfied: true, element_id: selector };
+    }
+
+    return new Promise((resolve) => {
+      let observer = null;
+      let timer = null;
+      let settled = false;
+      let disposed = false;
+
+      function dispose() {
+        if (disposed) return;
+        disposed = true;
+        if (timer) clearTimeout(timer);
+        if (observer) observer.disconnect();
+        if (activePointCancel === cancel) activePointCancel = null;
+      }
+
+      function settle(result) {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      }
+
+      function cancel(reason) {
+        dispose();
+        hidePointer();
+        settle({ satisfied: false, cancelled: true, element_id: selector, reason: reason });
+      }
+      activePointCancel = cancel;
+
+      observer = new MutationObserver(() => {
+        if (myOp !== pointOpSeq) return; // superseded
+        if (el.classList.contains(conditionClass)) {
+          dispose();
+          hidePointer();
+          settle({ satisfied: true, element_id: selector });
+        }
+      });
+      observer.observe(el, { attributes: true, attributeFilter: ['class'] });
+
+      if (timeoutMs > 0) {
+        timer = setTimeout(function () {
+          // Deliberately NOT disposing — a late file pick must still count.
+          console.log('[Maryam] Condition wait timed out (still listening):', selector);
+          settle({ satisfied: false, timed_out: true, element_id: selector });
+        }, timeoutMs);
+      }
+    });
+  }
+
   // Per-character typewriter pace. Deliberately kept (it is a demo
   // feature) but fast enough that a 13-digit CNIC lands in ~0.3 s.
   const TYPEWRITER_DELAY_MS = 25;
@@ -2074,17 +2869,81 @@
         };
       }
 
-      const el = await waitForElement('#' + fieldId);
+      const journey = getActiveJourney();
+      const fieldMeta = journey && journey.fields.find((f) => f.field_id === fieldId);
+      const selector = (fieldMeta && fieldMeta.selector) || ('#' + fieldId);
+
+      // A field whose prerequisite isn't filled yet (e.g. a district
+      // before its province) is refused outright — a defensive backstop
+      // against the agent asking out of order, independent of whichever
+      // conversation order it chose.
+      if (fieldMeta && fieldMeta.dependsOn) {
+        const dep = journey.fields.find((f) => f.field_id === fieldMeta.dependsOn);
+        if (dep && !isFieldSatisfied(dep)) {
+          return {
+            filled: false,
+            field_name: fieldId,
+            error: fieldMeta.dependsOn + ' must be filled first',
+            presentationInstructions:
+              'Pehle "' + (dep.label_en || fieldMeta.dependsOn) + '" poochhein ' +
+              'aur bharein, phir yeh field dobara try karein.',
+          };
+        }
+      }
+
+      const el = await waitForElement(selector);
+
+      // File inputs: the agent can never fabricate a citizen's document —
+      // point at the visible dropzone and wait for a REAL file pick
+      // (apply.js's wireDropzone() adds `has-file` to it), never touch
+      // el.value/.files directly.
+      if (fieldMeta && fieldMeta.type === 'file') {
+        const dropzoneSelector = fieldMeta.dropzoneSelector || selector;
+        const outcome = await pointAndAwaitCondition(dropzoneSelector, {
+          conditionClass: 'has-file',
+          actionLabel: 'Upload: ' + (fieldMeta.label_en || fieldId),
+        });
+        if (outcome.satisfied) {
+          return { filled: true, field_name: fieldId, manual_action: true };
+        }
+        return {
+          filled: false,
+          field_name: fieldId,
+          still_waiting: !!outcome.timed_out,
+          presentationInstructions:
+            'SPEAK THIS: describe exactly where the upload box is (' +
+            (fieldMeta.label_en || fieldId) + ') and ask the citizen to ' +
+            'pick a real file there. Do NOT claim a file is uploaded or ' +
+            'invent one. Once they say they picked a file, call ' +
+            'guide_next_step() or fill_field() again to re-check.',
+        };
+      }
 
       // Move pointer to the field (not awaited — see movePointerTo)
       movePointerTo(el);
       triggerPulse();
 
-      const fieldMeta = SITE_CONFIG.apply.fields.find((f) => f.field_id === fieldId);
       setNextStep('Filling in: ' + (fieldMeta ? fieldMeta.label_en : fieldId));
 
       // Highlight the field
       el.classList.add('field-highlight');
+
+      if (el.type === 'checkbox') {
+        const desired = coerceBoolean(value);
+        el.checked = desired;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        clearFieldHighlightSoon(el);
+        return { field_name: fieldId, value: desired, filled: true };
+      }
+
+      if (el.type === 'radio') {
+        // field_name here identifies the SPECIFIC option (its own id),
+        // not the shared group name.
+        el.checked = true;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        clearFieldHighlightSoon(el);
+        return { field_name: fieldId, value: el.value, filled: true };
+      }
 
       if (el.tagName === 'SELECT') {
         // Select-aware fill: match an option by value or label
@@ -2166,10 +3025,22 @@
                    'woh is waqt kaunse page par hain.',
     },
     {
+      name: 'get_service_journey',
+      handler: handleGetServiceJourney,
+      recovery_ur: 'Is service ki tafseelat nahi mil sakin. Dobara ' +
+                   'koshish karein ya user se service ka naam poochhein.',
+    },
+    {
       name: 'start_service',
       handler: handleStartService,
       recovery_ur: 'Service shuru karne mein masla aaya. User se maazrat ' +
                    'karein aur dobara koshish karein.',
+    },
+    {
+      name: 'start_quick_action',
+      handler: handleStartQuickAction,
+      recovery_ur: 'Yeh quick action shuru karne mein masla aaya. User se ' +
+                   'maazrat karein aur dobara koshish karein.',
     },
     {
       name: 'guide_next_step',
@@ -2340,6 +3211,20 @@
         'Guided flow "' + live.guided_flow.service_key +
         '" is ACTIVE at step "' + live.guided_flow.current_step +
         '" (' + live.guided_flow.step_number + '/' + live.guided_flow.total_steps + '). ' +
+        'Citizen is now on the "' + live.page + '" page (' + reason + '). ' +
+        'Technical context: ' + JSON.stringify(live);
+    } else if (live.quick_action) {
+      // Quick actions never navigate away from services.html, so this
+      // path is rare — a LiveKit reconnect (e.g. after an audio drop)
+      // while the offcanvas is still open. Same "you already have
+      // context" framing as the guided-flow branch above.
+      text =
+        '[PAGE UPDATE — ACTION REQUIRED] You already have full context on ' +
+        'this citizen\'s quick action (see below) — do NOT act confused. ' +
+        'CALL guide_next_step() NOW, then IMMEDIATELY speak its ' +
+        'presentationInstructions line out loud in this same turn. ' +
+        'Quick action "' + live.quick_action.action_key +
+        '" is ACTIVE at phase "' + live.quick_action.phase + '". ' +
         'Citizen is now on the "' + live.page + '" page (' + reason + '). ' +
         'Technical context: ' + JSON.stringify(live);
     } else {
@@ -2755,6 +3640,7 @@
     // seconds behind the page load and reads as Maryam having forgotten
     // where the citizen was.
     preRenderPendingFlowStep();
+    preRenderPendingQuickActionStep();
 
     if (saved) {
       setTimeout(async () => {
@@ -2789,11 +3675,18 @@
     }
   });
 
-  // Debug handle — lets us drive the flow from the browser console during the demo build.
+  // Debug handle — lets us drive the flow from the browser console during
+  // the demo build, and lets a headless test script call the exact RPC
+  // handler functions directly (equivalent to driving the real RPC layer
+  // minus the LiveKit transport).
   window.__maryam = {
     get room() { return maryamRoom; },
     get connected() { return maryamConnected; },
     loadFlow, saveFlow, clearFlow, pushPageContext,
     executeCurrentFlowStep, getCaptchaState, buildLiveContext, FLOW_STEPS,
+    SERVICE_JOURNEYS, QUICK_ACTION_JOURNEYS, getJourneyByKey, computeMissingFields,
+    handleStartService, handleGuideNextStep, handleFillField,
+    handleGetServiceJourney, handleStartQuickAction,
+    loadQuickActionFlow, executeCurrentQuickActionStep,
   };
 })();

@@ -14,24 +14,29 @@ A demo recreation of the Dastak (Punjab government services) portal with "Maryam
   if `/api/session` starts 404ing, remove the secret and restart.
 
 ### Syncing the remote assistant
-The agent's system prompt and tool declarations live on the remote Uplift
-assistant, not in this repo. After changing the guided flow, run — from Replit,
-where `UPLIFT_API_KEY` exists in Secrets:
+The agent's instructions come from `maryam-system-prompt.md` in this repo (do
+not hand-edit them on the Uplift dashboard — the next sync overwrites that).
+Tool declarations are generated from `scripts/sync-assistant.js` itself. After
+changing the guided flow or the prompt, run — from Replit, where
+`UPLIFT_API_KEY` exists in Secrets:
 
 ```bash
 node scripts/sync-assistant.js --dry-run   # review the diff first
 node scripts/sync-assistant.js             # apply it
 ```
 
-The script is idempotent. Anchor mismatches are warnings, not failures — if it
-warns, review that section by hand in the Uplift dashboard.
+The script is idempotent: it replaces the assistant's instructions wholesale
+with `maryam-system-prompt.md` and upserts every tool's description/parameter
+schema/timeout to match `maryam-agent.js`.
 
 ## Architecture
 - `server.js` — minimal Express static server; `POST /api/session` proxies Uplift session creation so `UPLIFT_API_KEY` never reaches the browser; `/api/config` is a stub.
 - Voice: the browser connects to a remote Uplift AI realtime assistant over LiveKit (`dastak-clone/assets/js/maryam-agent.js`). STT/TTS/LLM all run remotely; the browser registers RPC tools the agent calls:
   - `get_page_context` — page config + live DOM/form state
-  - `start_service` — begins a guided flow (points at buttons, waits for the citizen's click; never auto-clicks)
-  - `guide_next_step` — executes the next guided step
+  - `get_service_journey` — the full field list/validation/captcha info for a service or quick action (`SERVICE_JOURNEYS`/`QUICK_ACTION_JOURNEYS` — the same data the flow engine itself uses, so the tool and the actual behavior can't drift apart)
+  - `start_service` — begins a guided flow for one of the 6 license services (points at buttons, waits for the citizen's click; never auto-clicks)
+  - `start_quick_action` — same idea for the 3 quick-action panels (Track Application, e-License, Verify License), which never navigate — they open an offcanvas on services.html
+  - `guide_next_step` — executes the next guided step for whichever flow (service or quick action) is active
   - `point_to_element`, `fill_field`, `navigate_to_page`, `scroll_to_element`
 - **Pointing is semi-blocking.** One engine (`pointAndAwaitClick`) handles every
   pointing step. On a step that stays on the same page it waits up to 20 s for
