@@ -84,9 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
         scrollUpBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
     }
 
-    // Language toggle (visual only)
-    const langToggle = document.getElementById('langToggle');
-    langToggle?.addEventListener('click', () => langToggle.classList.toggle('on'));
+    // Language toggle is handled by assets/js/i18n.js
 
     // Client-side filter for service category cards
     const serviceSearch = document.getElementById('serviceSearch');

@@ -95,12 +95,12 @@
                 </div>
                 <div class="offcanvas-body p-4 p-lg-0">
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0 custom-nav-links gap-lg-2">
-                        <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/#about">About</a></li>
-                        <li class="nav-item"><a class="nav-link active" href="services.html">Services</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/#partners">Our Partners</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/#news">News</a></li>
-                        <li class="nav-item"><a class="nav-link" href="/#contact">Contact</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/" data-i18n="nav_home">Home</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/#about" data-i18n="nav_about">About</a></li>
+                        <li class="nav-item"><a class="nav-link active" href="services.html" data-i18n="nav_services">Services</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/#partners" data-i18n="nav_partners">Our Partners</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/#news" data-i18n="nav_news">News</a></li>
+                        <li class="nav-item"><a class="nav-link" href="/#contact" data-i18n="nav_contact">Contact</a></li>
                     </ul>
                     <div class="d-flex align-items-center flex-column flex-lg-row gap-3 mt-3 mt-lg-0 header-controls">
                         <div class="custom-lang-toggle d-flex align-items-center gap-2 me-lg-2 order-2 order-lg-1">
@@ -109,9 +109,9 @@
                             <a href="#"><span class="lang-text urdu-font">اردو</span></a>
                         </div>
                         <div class="d-flex flex-column flex-md-row align-items-center gap-2 order-1 order-lg-2">
-                            <a href="/#careers" class="btn custom-btn-outline">Become a Facilitator</a>
-                            <a href="#" class="btn custom-btn-solid">Register as Applicant</a>
-                            <a href="#" class="btn custom-btn-yellow">Login</a>
+                            <a href="/#careers" class="btn custom-btn-outline" data-i18n="nav_become_facilitator">Become a Facilitator</a>
+                            <a href="#" class="btn custom-btn-solid" data-i18n="nav_register_applicant">Register as Applicant</a>
+                            <a href="#" class="btn custom-btn-yellow" data-i18n="nav_login">Login</a>
                         </div>
                     </div>
                 </div>
@@ -122,7 +122,7 @@
     <section class="section-padding bg-white min-vh-100 pt-5">
         <div class="container">
 
-            <div class="demo-banner">
+            <div class="demo-banner" data-i18n="services_demo_banner">
                 <i class="fas fa-info-circle me-2"></i>
                 This is a static front-end recreation of the DLIMS Services accordion from
                 <strong>dastak.punjab.gov.pk/citizen/services</strong>. Forms are for UI demonstration only —
@@ -130,7 +130,7 @@
             </div>
 
             <div class="mb-4">
-                <h2 class="section-title">Services</h2>
+                <h2 class="section-title" data-i18n="services_page_title">Services</h2>
             </div>
 
             <!-- Controls (Search - Toggle) -->
@@ -139,13 +139,13 @@
                     <div class="col-lg-4 col-md-6">
                         <div class="service-search-box position-relative-custom">
                             <i class="fas fa-search"></i>
-                            <input class="home_page_search" type="search" placeholder="Search" autocomplete="off" disabled>
+                            <input class="home_page_search" type="search" placeholder="Search" autocomplete="off" disabled data-i18n-placeholder="home_search_placeholder">
                         </div>
                     </div>
                     <div class="col-lg-3 col-md-6">
                         <div class="toggle-switch-wrapper">
-                            <button type="button" class="toggle-btn active" data-target="citizen">Citizen</button>
-                            <button type="button" class="toggle-btn" data-target="business">Business</button>
+                            <button type="button" class="toggle-btn active" data-target="citizen" data-i18n="toggle_citizen">Citizen</button>
+                            <button type="button" class="toggle-btn" data-target="business" data-i18n="toggle_business">Business</button>
                         </div>
                     </div>
                 </div>
@@ -157,17 +157,17 @@
                     <h2 class="accordion-header" id="headingCitizen1">
                         <button class="accordion-button fw-bold py-3" type="button" data-bs-toggle="collapse"
                             data-bs-target="#collapseCitizen1" aria-expanded="true" aria-controls="collapseCitizen1">
-                            <span class="ps-2">DLIMS Services</span>
+                            <span class="ps-2" data-i18n="dept_dlims">DLIMS Services</span>
                         </button>
 
                         <div class="dlims-header-actions">
-                            <button type="button" class="btn custom-btn-yellow" data-bs-toggle="offcanvas" data-bs-target="#trackdlimsOffcanvas">
+                            <button type="button" class="btn custom-btn-yellow" data-bs-toggle="offcanvas" data-bs-target="#trackdlimsOffcanvas" data-i18n="dept_track_application">
                                 Track Application
                             </button>
-                            <button type="button" class="btn custom-btn-yellow" data-bs-toggle="offcanvas" data-bs-target="#eLicenseOffcanvas">
+                            <button type="button" class="btn custom-btn-yellow" data-bs-toggle="offcanvas" data-bs-target="#eLicenseOffcanvas" data-i18n="dept_e_license">
                                 e-License
                             </button>
-                            <button type="button" class="btn custom-btn-yellow" data-bs-toggle="offcanvas" data-bs-target="#VerifyOffcanvas">
+                            <button type="button" class="btn custom-btn-yellow" data-bs-toggle="offcanvas" data-bs-target="#VerifyOffcanvas" data-i18n="dept_verify_license">
                                 Verify License
                             </button>
                         </div>
@@ -181,42 +181,42 @@
                                 <div class="col-lg-3 col-md-4 col-sm-6">
                                     <div class="service-card-item" data-service-key="learner_driving_license">
                                         <div class="svc-icon"><img src="assets/images/learner_liceness.svg" class="img-fluid" alt=""></div>
-                                        <div class="svc-name">Learner Driving License</div>
+                                        <div class="svc-name" data-i18n="svc_learner_dl">Learner Driving License</div>
                                     </div>
                                 </div>
 
                                 <div class="col-lg-3 col-md-4 col-sm-6">
                                     <div class="service-card-item" data-service-key="renewal_learner_driving_license">
                                         <div class="svc-icon"><img src="assets/images/learner_liceness.svg" class="img-fluid" alt=""></div>
-                                        <div class="svc-name">Renewal of Learners Driving License</div>
+                                        <div class="svc-name" data-i18n="svc_renewal_learner_dl">Renewal of Learners Driving License</div>
                                     </div>
                                 </div>
 
                                 <div class="col-lg-3 col-md-4 col-sm-6">
                                     <div class="service-card-item" data-service-key="renewal_driving_license" style="cursor:pointer;">
                                         <div class="svc-icon"><img src="assets/images/regular_licsness_renew.svg" class="img-fluid" alt=""></div>
-                                        <div class="svc-name">Renewal of Regular License</div>
+                                        <div class="svc-name" data-i18n="svc_renewal_regular_dl">Renewal of Regular License</div>
                                     </div>
                                 </div>
 
                                 <div class="col-lg-3 col-md-4 col-sm-6">
                                     <div class="service-card-item" data-service-key="duplicate_driving_license">
                                         <div class="svc-icon"><img src="assets/images/duplicate_licenes.svg" class="img-fluid" alt=""></div>
-                                        <div class="svc-name">Duplicate Driving License</div>
+                                        <div class="svc-name" data-i18n="svc_duplicate_dl">Duplicate Driving License</div>
                                     </div>
                                 </div>
 
                                 <div class="col-lg-3 col-md-4 col-sm-6">
                                     <div class="service-card-item" data-service-key="international_driving_license_duplicate">
                                         <div class="svc-icon"><img src="assets/images/international_licenes.svg" class="img-fluid" alt=""></div>
-                                        <div class="svc-name">Duplicate International Driving License</div>
+                                        <div class="svc-name" data-i18n="svc_duplicate_intl_dl">Duplicate International Driving License</div>
                                     </div>
                                 </div>
 
                                 <div class="col-lg-3 col-md-4 col-sm-6">
                                     <div class="service-card-item" data-service-key="international_driving_license">
                                         <div class="svc-icon"><img src="assets/images/international_licenes.svg" class="img-fluid" alt=""></div>
-                                        <div class="svc-name">Renewal International Driving License</div>
+                                        <div class="svc-name" data-i18n="svc_renewal_intl_dl">Renewal International Driving License</div>
                                     </div>
                                 </div>
 
@@ -230,7 +230,7 @@
                 <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Local Govt. &amp; Community Development">
                     <h2 class="accordion-header">
                         <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
-                            <span class="ps-2">Local Govt. &amp; Community Development</span>
+                            <span class="ps-2" data-i18n="dept_local_govt">Local Govt. &amp; Community Development</span>
                         </button>
                     </h2>
                 </div>
@@ -238,7 +238,7 @@
                 <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Punjab Police">
                     <h2 class="accordion-header">
                         <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
-                            <span class="ps-2">Punjab Police</span>
+                            <span class="ps-2" data-i18n="dept_police">Punjab Police</span>
                         </button>
                     </h2>
                 </div>
@@ -246,7 +246,7 @@
                 <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Lahore Development Authority (LDA)">
                     <h2 class="accordion-header">
                         <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
-                            <span class="ps-2">Lahore Development Authority (LDA)</span>
+                            <span class="ps-2" data-i18n="dept_lda">Lahore Development Authority (LDA)</span>
                         </button>
                     </h2>
                 </div>
@@ -254,7 +254,7 @@
                 <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Social Welfare Department">
                     <h2 class="accordion-header">
                         <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
-                            <span class="ps-2">Social Welfare Department</span>
+                            <span class="ps-2" data-i18n="dept_social_welfare">Social Welfare Department</span>
                         </button>
                     </h2>
                 </div>
@@ -262,7 +262,7 @@
                 <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Excise and Taxation">
                     <h2 class="accordion-header">
                         <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
-                            <span class="ps-2">Excise and Taxation</span>
+                            <span class="ps-2" data-i18n="dept_excise">Excise and Taxation</span>
                         </button>
                     </h2>
                 </div>
@@ -270,7 +270,7 @@
                 <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Board of Revenue">
                     <h2 class="accordion-header">
                         <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
-                            <span class="ps-2">Board of Revenue</span>
+                            <span class="ps-2" data-i18n="dept_bor">Board of Revenue</span>
                         </button>
                     </h2>
                 </div>
@@ -278,7 +278,7 @@
                 <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Forestry, Wildlife and Fisheries">
                     <h2 class="accordion-header">
                         <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
-                            <span class="ps-2">Forestry, Wildlife and Fisheries</span>
+                            <span class="ps-2" data-i18n="dept_forestry">Forestry, Wildlife and Fisheries</span>
                         </button>
                     </h2>
                 </div>
@@ -286,7 +286,7 @@
                 <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Punjab Food Authority">
                     <h2 class="accordion-header">
                         <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
-                            <span class="ps-2">Punjab Food Authority</span>
+                            <span class="ps-2" data-i18n="dept_food_authority">Punjab Food Authority</span>
                         </button>
                     </h2>
                 </div>
@@ -294,7 +294,7 @@
                 <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Water and Sewerage Authority">
                     <h2 class="accordion-header">
                         <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
-                            <span class="ps-2">Water and Sewerage Authority</span>
+                            <span class="ps-2" data-i18n="dept_water_sewerage">Water and Sewerage Authority</span>
                         </button>
                     </h2>
                 </div>
@@ -302,7 +302,7 @@
                 <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Higher Education Department">
                     <h2 class="accordion-header">
                         <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
-                            <span class="ps-2">Higher Education Department</span>
+                            <span class="ps-2" data-i18n="dept_higher_ed">Higher Education Department</span>
                         </button>
                     </h2>
                 </div>
@@ -314,7 +314,7 @@
     <!-- --------------------= e-License Offcanvas --------------------= -->
     <div class="offcanvas offcanvas-end common-canvas" tabindex="-1" id="eLicenseOffcanvas" aria-labelledby="eLicenseOffcanvasLabel">
         <div class="offcanvas-header border-bottom bg_light_cs">
-            <h5 class="offcanvas-title" id="eLicenseOffcanvasLabel">e-License</h5>
+            <h5 class="offcanvas-title" id="eLicenseOffcanvasLabel" data-i18n="oc_e_license_title">e-License</h5>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
         <div class="offcanvas-body p-4">
@@ -324,24 +324,24 @@
                     <div class="d-flex gap-4">
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="licenseType" id="regularLicense" value="regular" checked>
-                            <label class="form-check-label small fw-bold" for="regularLicense">Regular License</label>
+                            <label class="form-check-label small fw-bold" for="regularLicense" data-i18n="label_regular_license">Regular License</label>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="licenseType" id="internationalLicense" value="international">
-                            <label class="form-check-label small fw-bold" for="internationalLicense">International License</label>
+                            <label class="form-check-label small fw-bold" for="internationalLicense" data-i18n="label_international_license">International License</label>
                         </div>
                     </div>
                 </div>
 
                 <div class="col-12">
-                    <label class="form-label small fw-bold" id="cnicPassportLabel">Enter CNIC</label>
+                    <label class="form-label small fw-bold" id="cnicPassportLabel" data-i18n="label_enter_cnic">Enter CNIC</label>
                     <input type="text" class="form-control" id="cnicPassportInput" name="identity_number" maxlength="13"
-                        placeholder="CNIC without dashes. e.g (1111122222223)" autocomplete="off">
+                        placeholder="CNIC without dashes. e.g (1111122222223)" autocomplete="off" data-i18n-placeholder="placeholder_cnic">
                 </div>
 
                 <div class="col-12">
-                    <label class="form-label small fw-bold">Date of Birth</label>
-                    <input type="text" name="dob" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off">
+                    <label class="form-label small fw-bold" data-i18n="label_dob">Date of Birth</label>
+                    <input type="text" name="dob" class="form-control" placeholder="YYYY-MM-DD" autocomplete="off" data-i18n-placeholder="placeholder_dob">
                 </div>
 
                 <hr>
@@ -349,29 +349,29 @@
                 <div class="row math-captcha-wrapper">
                     <div class="user-type mb-2 text-center">
                         <strong class="math-question">Loading...</strong>
-                        <button type="button" class="btn btn-sm btn-link text-black reloadCaptcha">Reload</button>
+                        <button type="button" class="btn btn-sm btn-link text-black reloadCaptcha" data-i18n="btn_reload">Reload</button>
                     </div>
                     <div class="user-type mb-2">
-                        <input type="text" class="form-control math-captcha-input" placeholder="Answer">
+                        <input type="text" class="form-control math-captcha-input" placeholder="Answer" data-i18n-placeholder="placeholder_answer">
                     </div>
                     <div class="captcha_error text-danger text-center mt-1" style="display:none;"></div>
                 </div>
 
-                <div class="demo-note" id="eLicenseDemoNote">
+                <div class="demo-note" id="eLicenseDemoNote" data-i18n="demo_note_e_license">
                     <i class="fas fa-flask me-1"></i> Demo mode — this form doesn't connect to a real backend, so no e-License is actually generated.
                 </div>
             </div>
         </div>
         <div class="offcanvas-footer p-4 border-0 d-flex gap-3">
-            <button type="button" class="btn btn-light border fw-bold py-2 px-4" data-bs-dismiss="offcanvas">Cancel</button>
-            <button type="button" class="btn btn-warning w-100 fw-bold py-2" id="generateLicenseButton">Generate e-License</button>
+            <button type="button" class="btn btn-light border fw-bold py-2 px-4" data-bs-dismiss="offcanvas" data-i18n="btn_cancel">Cancel</button>
+            <button type="button" class="btn btn-warning w-100 fw-bold py-2" id="generateLicenseButton" data-i18n="btn_generate_license">Generate e-License</button>
         </div>
     </div>
 
     <!-- --------------------= Track License Offcanvas --------------------= -->
     <div class="offcanvas offcanvas-end common-canvas" tabindex="-1" id="trackdlimsOffcanvas" aria-labelledby="trackdlimsOffcanvasLabel">
         <div class="offcanvas-header border-bottom bg_light_cs">
-            <h5 class="offcanvas-title" id="trackdlimsOffcanvasLabel">Track License</h5>
+            <h5 class="offcanvas-title" id="trackdlimsOffcanvasLabel" data-i18n="oc_track_title">Track License</h5>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
         <div class="offcanvas-body p-4">
@@ -379,38 +379,38 @@
                 <div class="alert alert-danger mt-2 d-none" id="error_form_verify"></div>
 
                 <div class="col-12">
-                    <label class="form-label small fw-bold">Enter CNIC</label>
+                    <label class="form-label small fw-bold" data-i18n="label_enter_cnic">Enter CNIC</label>
                     <input type="text" class="form-control" name="identity_number" maxlength="13"
-                        placeholder="CNIC without dashes. e.g (1111122222223)" autocomplete="off">
+                        placeholder="CNIC without dashes. e.g (1111122222223)" autocomplete="off" data-i18n-placeholder="placeholder_cnic">
                 </div>
                 <hr>
 
                 <div class="row math-captcha-wrapper">
                     <div class="user-type mb-2 text-center">
                         <strong class="math-question">Loading...</strong>
-                        <button type="button" class="btn btn-sm btn-link text-black reloadCaptcha">Reload</button>
+                        <button type="button" class="btn btn-sm btn-link text-black reloadCaptcha" data-i18n="btn_reload">Reload</button>
                     </div>
                     <div class="user-type mb-2">
-                        <input type="text" class="form-control math-captcha-input" placeholder="Answer">
+                        <input type="text" class="form-control math-captcha-input" placeholder="Answer" data-i18n-placeholder="placeholder_answer">
                     </div>
                     <div class="captcha_error text-danger text-center mt-1" style="display:none;"></div>
                 </div>
 
-                <div class="demo-note" id="trackDemoNote">
+                <div class="demo-note" id="trackDemoNote" data-i18n="demo_note_track">
                     <i class="fas fa-flask me-1"></i> Demo mode — there's no real application to look up, so this can't return a genuine tracking result.
                 </div>
             </div>
         </div>
         <div class="offcanvas-footer p-4 border-0 d-flex gap-3">
-            <button type="button" class="btn btn-light border fw-bold py-2 px-4" data-bs-dismiss="offcanvas">Cancel</button>
-            <button type="button" class="btn btn-warning w-100 fw-bold py-2" id="generateTrackButton">Track License</button>
+            <button type="button" class="btn btn-light border fw-bold py-2 px-4" data-bs-dismiss="offcanvas" data-i18n="btn_cancel">Cancel</button>
+            <button type="button" class="btn btn-warning w-100 fw-bold py-2" id="generateTrackButton" data-i18n="btn_track_license">Track License</button>
         </div>
     </div>
 
     <!-- --------------------= Verify License Offcanvas --------------------= -->
     <div class="offcanvas offcanvas-end common-canvas" tabindex="-1" id="VerifyOffcanvas" aria-labelledby="VerifyOffcanvasLabel">
         <div class="offcanvas-header border-bottom bg_light_cs">
-            <h5 class="offcanvas-title" id="VerifyOffcanvasLabel">Verify License</h5>
+            <h5 class="offcanvas-title" id="VerifyOffcanvasLabel" data-i18n="oc_verify_title">Verify License</h5>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
         </div>
         <div class="offcanvas-body p-4">
@@ -420,23 +420,23 @@
                     <div class="d-flex gap-4">
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="verifylicenseType" id="verifyregularLicense" value="regular" checked>
-                            <label class="form-check-label small fw-bold" for="verifyregularLicense">Regular License</label>
+                            <label class="form-check-label small fw-bold" for="verifyregularLicense" data-i18n="label_regular_license">Regular License</label>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="radio" name="verifylicenseType" id="verifyinternationalLicense" value="international">
-                            <label class="form-check-label small fw-bold" for="verifyinternationalLicense">International License</label>
+                            <label class="form-check-label small fw-bold" for="verifyinternationalLicense" data-i18n="label_international_license">International License</label>
                         </div>
                     </div>
                 </div>
 
                 <div class="col-12">
-                    <label class="form-label small fw-bold" id="verifycnicPassportLabel">Enter CNIC</label>
+                    <label class="form-label small fw-bold" id="verifycnicPassportLabel" data-i18n="label_enter_cnic">Enter CNIC</label>
                     <input type="text" class="form-control" name="verify_identity_number" maxlength="13"
-                        placeholder="CNIC without dashes. e.g (1111122222223)" autocomplete="off">
+                        placeholder="CNIC without dashes. e.g (1111122222223)" autocomplete="off" data-i18n-placeholder="placeholder_cnic">
                 </div>
 
                 <div class="col-12">
-                    <label class="form-label small fw-bold">License Number</label>
+                    <label class="form-label small fw-bold" data-i18n="label_license_number">License Number</label>
                     <input type="text" class="form-control" autocomplete="off">
                 </div>
                 <hr>
@@ -444,22 +444,22 @@
                 <div class="row math-captcha-wrapper">
                     <div class="user-type mb-2 text-center">
                         <strong class="math-question">Loading...</strong>
-                        <button type="button" class="btn btn-sm btn-link text-black reloadCaptcha">Reload</button>
+                        <button type="button" class="btn btn-sm btn-link text-black reloadCaptcha" data-i18n="btn_reload">Reload</button>
                     </div>
                     <div class="user-type mb-2">
-                        <input type="text" class="form-control math-captcha-input" placeholder="Answer">
+                        <input type="text" class="form-control math-captcha-input" placeholder="Answer" data-i18n-placeholder="placeholder_answer">
                     </div>
                     <div class="captcha_error text-danger text-center mt-1" style="display:none;"></div>
                 </div>
 
-                <div class="demo-note" id="verifyDemoNote">
+                <div class="demo-note" id="verifyDemoNote" data-i18n="demo_note_verify">
                     <i class="fas fa-flask me-1"></i> Demo mode — there's no license database behind this, so nothing is really verified.
                 </div>
             </div>
         </div>
         <div class="offcanvas-footer p-4 border-0 d-flex gap-3">
-            <button type="button" class="btn btn-light border fw-bold py-2 px-4" data-bs-dismiss="offcanvas">Cancel</button>
-            <button type="button" class="btn btn-warning w-100 fw-bold py-2" id="verifyLicenseButton">Verify License</button>
+            <button type="button" class="btn btn-light border fw-bold py-2 px-4" data-bs-dismiss="offcanvas" data-i18n="btn_cancel">Cancel</button>
+            <button type="button" class="btn btn-warning w-100 fw-bold py-2" id="verifyLicenseButton" data-i18n="btn_verify_license">Verify License</button>
         </div>
     </div>
 
@@ -554,18 +554,18 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content border-0" style="border-radius:16px;overflow:hidden;">
                 <div class="modal-header border-0" style="background:#167B38;">
-                    <h5 class="modal-title text-white fw-bold" id="successModalLabel">Application Submitted</h5>
+                    <h5 class="modal-title text-white fw-bold" id="successModalLabel" data-i18n="success_modal_title">Application Submitted</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body text-center py-5">
                     <div style="font-size:4rem;margin-bottom:16px;">✅</div>
-                    <h5 class="fw-bold mb-2">Congratulations!</h5>
-                    <p class="text-muted mb-1">Your license renewal application has been submitted successfully (demo only — no real application is filed).</p>
-                    <p class="text-muted small">In production, a confirmation SMS and email would be sent to the applicant.</p>
+                    <h5 class="fw-bold mb-2" data-i18n="success_modal_heading">Congratulations!</h5>
+                    <p class="text-muted mb-1" data-i18n="success_modal_body">Your license renewal application has been submitted successfully (demo only — no real application is filed).</p>
+                    <p class="text-muted small" data-i18n="success_modal_note">In production, a confirmation SMS and email would be sent to the applicant.</p>
                 </div>
                 <div class="modal-footer border-0 justify-content-center pb-4">
                     <button type="button" class="btn text-white fw-bold px-5 py-2"
-                            style="background:#167B38;border-radius:8px;" data-bs-dismiss="modal">Close</button>
+                            style="background:#167B38;border-radius:8px;" data-bs-dismiss="modal" data-i18n="btn_close">Close</button>
                 </div>
             </div>
         </div>
@@ -589,6 +589,7 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="assets/js/services-data.js?v=2"></script>
     <script src="services.js?v=6"></script>
+    <script src="assets/js/i18n.js"></script>
 
     <!-- Wizard navigation — must load AFTER Bootstrap -->
     <script>
