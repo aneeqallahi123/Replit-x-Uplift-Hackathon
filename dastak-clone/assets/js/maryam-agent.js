@@ -3126,7 +3126,14 @@
     try { return JSON.parse(raw); } catch (e) { return null; }
   }
 
-  async function createNewSession() {
+  // Fetches a session but does NOT save it to sessionStorage — used by the
+  // cold-start pre-warm below, so merely loading the page never leaves a
+  // token behind. A saved session must mean "the citizen actually started
+  // talking to Maryam" — the auto-reconnect logic on the next reload is
+  // gated on exactly that, and a token saved just from pre-warming (with
+  // no real connection ever happening) would falsely trigger it, racing
+  // an unwanted background auto-reconnect against a genuine mic click.
+  async function fetchNewSessionData() {
     // Proxied through server.js so the API key never touches the browser.
     const res = await fetch('/api/session', {
       method: 'POST',
@@ -3138,7 +3145,11 @@
       throw new Error('Session creation failed: ' + res.status +
         (body.error ? ' — ' + body.error : ''));
     }
-    const data = await res.json();
+    return res.json();
+  }
+
+  async function createNewSession() {
+    const data = await fetchNewSessionData();
     saveSession(data);
     return data;
   }
@@ -3169,7 +3180,13 @@
       const inFlight = pendingSessionPromise;
       pendingSessionPromise = null;
       const preWarmed = await inFlight;
-      if (preWarmed) return preWarmed;
+      if (preWarmed) {
+        // Only now — at the moment it's actually being used for a real
+        // connection — does this become a "saved session" for the
+        // auto-reconnect logic's purposes.
+        saveSession(preWarmed);
+        return preWarmed;
+      }
       // Pre-warm failed — fall through to a fresh attempt below.
     }
     return createNewSession();
@@ -3709,7 +3726,7 @@
     // waiting for the mic-button click. Saves real seconds off the
     // visible "Connecting to Maryam..." delay; getOrResumeSession() picks
     // this up whenever the first connect actually happens.
-    pendingSessionPromise = createNewSession().catch((err) => {
+    pendingSessionPromise = fetchNewSessionData().catch((err) => {
       console.warn('[Maryam] Pre-warm session creation failed (will retry on connect):', err);
       return null;
     });
