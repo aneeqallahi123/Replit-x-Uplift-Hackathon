@@ -60,6 +60,20 @@
             opacity: 0.55;
             cursor: not-allowed;
         }
+
+        .accordion-item.dept-disabled {
+            opacity: 0.5;
+        }
+
+        .accordion-item.dept-disabled .accordion-button {
+            cursor: not-allowed;
+            pointer-events: none;
+            background: #f5f5f5;
+        }
+
+        .accordion-item.dept-disabled .accordion-button::after {
+            opacity: 0.4;
+        }
     </style>
 </head>
 
@@ -209,6 +223,88 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Other departments — shown for parity with the live portal, but disabled/dimmed
+                     since only DLIMS Services is wired up in this demo. -->
+                <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Local Govt. &amp; Community Development">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
+                            <span class="ps-2">Local Govt. &amp; Community Development</span>
+                        </button>
+                    </h2>
+                </div>
+
+                <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Punjab Police">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
+                            <span class="ps-2">Punjab Police</span>
+                        </button>
+                    </h2>
+                </div>
+
+                <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Lahore Development Authority (LDA)">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
+                            <span class="ps-2">Lahore Development Authority (LDA)</span>
+                        </button>
+                    </h2>
+                </div>
+
+                <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Social Welfare Department">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
+                            <span class="ps-2">Social Welfare Department</span>
+                        </button>
+                    </h2>
+                </div>
+
+                <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Excise and Taxation">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
+                            <span class="ps-2">Excise and Taxation</span>
+                        </button>
+                    </h2>
+                </div>
+
+                <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Board of Revenue">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
+                            <span class="ps-2">Board of Revenue</span>
+                        </button>
+                    </h2>
+                </div>
+
+                <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Forestry, Wildlife and Fisheries">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
+                            <span class="ps-2">Forestry, Wildlife and Fisheries</span>
+                        </button>
+                    </h2>
+                </div>
+
+                <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Punjab Food Authority">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
+                            <span class="ps-2">Punjab Food Authority</span>
+                        </button>
+                    </h2>
+                </div>
+
+                <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Water and Sewerage Authority">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
+                            <span class="ps-2">Water and Sewerage Authority</span>
+                        </button>
+                    </h2>
+                </div>
+
+                <div class="accordion-item mb-3 border-0 overflow-hidden dept-disabled" data-department-key="Higher Education Department">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button fw-bold py-3 collapsed" type="button" disabled aria-expanded="false">
+                            <span class="ps-2">Higher Education Department</span>
+                        </button>
+                    </h2>
                 </div>
             </div>
 
