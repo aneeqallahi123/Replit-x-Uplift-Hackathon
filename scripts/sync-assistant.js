@@ -40,6 +40,7 @@ const TIMEOUTS = {
   point_to_element: 25000,    // hard-capped at 20 s browser-side
   scroll_to_element: 10000,
   navigate_to_page: 10000,
+  end_session: 8000,          // returns almost immediately; the grace delay happens client-side
 };
 
 const TOOLS = [
@@ -223,6 +224,17 @@ const TOOLS = [
         },
       },
     },
+  },
+  {
+    name: 'end_session',
+    description:
+      'Ends the voice session. Call this ONLY in the same turn right ' +
+      'after you have already spoken a farewell line (e.g. "Allah ' +
+      'Hafiz") — never before saying goodbye, and never silently. Use it ' +
+      'once the conversation has naturally concluded: the workflow is ' +
+      'complete and the citizen has nothing else, or they explicitly say ' +
+      'goodbye / want to stop. Do not speak anything after calling this.',
+    parameters: { type: 'object', required: [], properties: {} },
   },
 ];
 

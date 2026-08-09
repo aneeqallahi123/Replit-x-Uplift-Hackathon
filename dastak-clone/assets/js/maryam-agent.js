@@ -28,6 +28,10 @@
   // Stores a [CLICK] notification in sessionStorage so it survives page navigation
   // and can be replayed after auto-reconnect on the next page.
   const PENDING_CLICK_KEY = 'maryam_pending_click';
+  // Set by endSession() when a flow/quick action was still active — tells
+  // the next reconnect's pushPageContext to ask before resuming instead
+  // of assuming the citizen wants to continue.
+  const RESUME_PENDING_KEY = 'maryam_resume_pending';
   const UPLIFT_BASE = 'https://api.upliftai.org/v1';
 
   // -------------------------------------------------------------------
@@ -686,6 +690,7 @@
       selector: function () { return '#btnSubmitApplication'; },
       navigates: false,
       action_label: 'Click the "Submit" button.',
+      say_now: 'Submit button highlight ho gaya hai — ab isi waqt uss par click karein.',
       say_after: 'Application submit ho rahi hai.',
     },
     {
@@ -1343,12 +1348,21 @@
     }
   }
 
-  // Fully stops Maryam — disconnects the room and mic, clears the saved
-  // session/guided flow so nothing auto-reconnects, and resets the
+  // Fully stops Maryam — disconnects the room and mic, and resets the
   // widget to its pre-connection state. Distinct from muting, which
   // keeps the session alive and just stops sending audio.
+  //
+  // Deliberately does NOT clear an in-progress guided flow/quick action —
+  // ending is a deliberate citizen action, not the same as finishing.
+  // Instead it flags RESUME_PENDING_KEY so the next reconnect's
+  // pushPageContext asks whether to continue, rather than either
+  // silently forgetting the flow or silently barreling ahead as if
+  // nothing happened.
   async function endSession() {
     closePanel();
+    if (loadFlow() || loadQuickActionFlow()) {
+      try { sessionStorage.setItem(RESUME_PENDING_KEY, '1'); } catch (e) {}
+    }
     try {
       if (maryamRoom) await maryamRoom.disconnect();
     } catch (e) {
@@ -1356,7 +1370,6 @@
     }
     maryamRoom = null;
     maryamConnected = false;
-    clearFlow();
     sessionStorage.removeItem(SESSION_STORAGE_KEY);
 
     const micBtn = document.getElementById('maryam-mic-btn');
@@ -1374,6 +1387,26 @@
     setStatus('', false);
     setActivity('idle');
     setNextStep(null);
+  }
+
+  // How long to keep the room open after end_session() is called, so the
+  // citizen's already-spoken farewell line finishes playing before the
+  // connection actually drops instead of being cut off mid-word.
+  const END_SESSION_GRACE_MS = 4000;
+
+  // RPC handler for end_session — called by the agent AFTER it has
+  // already spoken a farewell (e.g. "Allah Hafiz"), never before. Reuses
+  // endSession() itself, so an in-progress flow is preserved and offered
+  // for resumption next time, exactly like the manual End button.
+  async function handleEndSession() {
+    setTimeout(function () { endSession(); }, END_SESSION_GRACE_MS);
+    return {
+      ending: true,
+      presentationInstructions:
+        'Do not say anything else after this call — you have already ' +
+        'said your farewell line. Stay silent; the session will end on ' +
+        'its own in a few seconds.',
+    };
   }
 
   function delay(ms) {
@@ -1886,47 +1919,43 @@
           current.phase = 'done';
           saveQuickActionFlow(current);
         }
+        sendRoomText(
+          '[CLICK: quick_action_action] (system message — citizen clicked ' +
+          'the highlighted button.) Say: "Theek hai, ho gaya." — then ' +
+          'immediately call guide_next_step() to confirm the result.'
+        );
       };
 
-      const outcome = await pointAndAwaitClick(journey.actionButtonSelector, {
+      // Fire and forget, same reasoning as executeCurrentFlowStep: speak
+      // the instant the highlight appears, don't wait for the click.
+      pointAndAwaitClick(journey.actionButtonSelector, {
         onClicked: onClicked,
         actionLabel: 'Click "' + journey.label_en + '".',
+      }).then(function (r) {
+        if (r.clicked) return;
+        if (r.timed_out) {
+          sendRoomText(
+            '[STILL WAITING — system message] The citizen has not yet ' +
+            'clicked the highlighted "' + journey.label_en + '" button. ' +
+            'Gently remind them once (in Urdu), then wait quietly again.'
+          );
+          return;
+        }
+        console.error('[Maryam] Could not point at quick-action button', journey.actionButtonSelector, r.reason);
       });
 
-      if (outcome.clicked) {
-        return {
-          active: true,
-          phase: 'action',
-          clicked: true,
-          presentationInstructions:
-            'SPEAK THIS RIGHT NOW, in this same turn — do not stay silent: ' +
-            '"Theek hai, ho gaya." — then immediately call guide_next_step() ' +
-            'to confirm the result.',
-        };
-      }
-
-      if (outcome.timed_out) {
-        return {
-          active: true,
-          phase: 'action',
-          clicked: false,
-          still_waiting: true,
-          presentationInstructions:
-            'User ne abhi tak click nahi kiya. Narmi se yaad dilayein ke ' +
-            'screen par jo cheez highlight ho rahi hai uss par click karein. ' +
-            'Phir guide_next_step() dobara call karein.',
-        };
-      }
-
-      console.error('[Maryam] Could not point at quick-action button', journey.actionButtonSelector, outcome.reason);
       return {
         active: true,
         phase: 'action',
-        pointed: false,
-        error: outcome.reason,
+        pointed: true,
+        waiting_for_click: true,
         presentationInstructions:
-          'Button screen par nahi mila. User ko manually us par click ' +
-          'karne mein madad karein, ya guide_next_step dobara call karein.',
+          'SPEAK THIS RIGHT NOW, in this same turn — do not highlight ' +
+          'silently and wait: "Highlighted button par ab isi waqt click ' +
+          'karein." The citizen stays on this same page — do NOT call any ' +
+          'tool right now, wait quietly. A [CLICK] message will arrive the ' +
+          'moment they click; speak its line and call guide_next_step() ' +
+          'immediately when it does.',
       };
     }
 
@@ -2260,14 +2289,29 @@
       sendClickNotification(step, current);
     };
 
+    // Fire and forget for EVERY pointing step, not just navigating ones —
+    // awaiting the click here meant the tool call itself didn't return
+    // until the citizen had already clicked (up to 20s later), so the
+    // agent had nothing to say until after the fact. Speaking must happen
+    // the instant the highlight appears, so we return say_now right away
+    // and let the click land asynchronously; sendClickNotification (via
+    // the still-open room — same page, nothing unloads) is what tells the
+    // agent afterward to speak the confirmation and advance.
+    pointAndAwaitClick(selector, {
+      timeoutMs: step.navigates ? 0 : POINT_TIMEOUT_MS,
+      onClicked: onClicked,
+      actionLabel: step.action_label,
+    }).then(function (r) {
+      if (r.clicked) return;
+      if (r.timed_out) {
+        console.log('[Maryam] Point timed out without a click:', step.id);
+        sendStillWaitingNotification(step);
+        return;
+      }
+      console.log('[Maryam] Point ended without a click:', step.id, r);
+    });
+
     if (step.navigates) {
-      // Fire and forget — do not await, the response cannot survive unload.
-      pointAndAwaitClick(selector, { timeoutMs: 0, onClicked: onClicked, actionLabel: step.action_label })
-        .then(function (r) {
-          if (!r.clicked) {
-            console.log('[Maryam] Navigating step point ended without click:', step.id, r);
-          }
-        });
       return {
         active: true,
         step: step.id,
@@ -2285,65 +2329,21 @@
       };
     }
 
-    const outcome = await pointAndAwaitClick(selector, {
-      timeoutMs: POINT_TIMEOUT_MS,
-      onClicked: onClicked,
-      actionLabel: step.action_label,
-    });
-
-    if (outcome.clicked) {
-      return {
-        active: true,
-        step: step.id,
-        clicked: true,
-        presentationInstructions:
-          'SPEAK THIS RIGHT NOW, in this same turn — do not stay silent: "' +
-          (step.say_after || 'Yeh step ho gaya. Ab agla qadam yeh hai.') +
-          '" — then immediately call guide_next_step(). This line already ' +
-          'confirms what just happened in factual terms before naming the ' +
-          'next step — do not ALSO thank or praise the citizen ("shabash", ' +
-          '"bohat acha") on top of it, and do not skip the confirmation ' +
-          'either; say the line exactly as given.',
-      };
-    }
-
-    if (outcome.timed_out) {
-      return {
-        active: true,
-        step: step.id,
-        clicked: false,
-        still_waiting: true,
-        presentationInstructions:
-          'User ne abhi tak click nahi kiya. Narmi se yaad dilayein ke ' +
-          'screen par jo cheez highlight ho rahi hai uss par ' +
-          'tap karein — pointer wahin maujood hai. Phir guide_next_step() ' +
-          'dobara call karein.',
-      };
-    }
-
-    if (outcome.reason === 'superseded while waiting for element' ||
-        (outcome.reason || '').indexOf('superseded') !== -1) {
-      // Another point op took over (usually a duplicate guide_next_step).
-      return {
-        active: true,
-        step: step.id,
-        superseded: true,
-        presentationInstructions:
-          'Pointer pehle se hi sahi jagah par hai. User ko highlighted ' +
-          'element par click karne ko kahein.',
-      };
-    }
-
-    console.error('[Maryam] Could not point at', selector, outcome.reason);
     return {
       active: true,
       step: step.id,
-      pointed: false,
-      error: outcome.reason,
+      pointed: true,
+      waiting_for_click: true,
       presentationInstructions:
-        'Element screen par nahi mila: ' + selector + '. ' +
-        'User ko manually navigate karne mein madad karein, ' +
-        'ya guide_next_step dobara call karein.',
+        'SPEAK THIS RIGHT NOW, in this same turn — do not highlight ' +
+        'silently and wait: "' +
+        (step.say_now ||
+          'Button highlight ho gaya hai — ab isi waqt uss par click karein.') +
+        '" The citizen stays on this same page for this step — do NOT ' +
+        'call any tool right now, just wait quietly. A [CLICK] message ' +
+        'will arrive the moment they click; when it does, speak its line ' +
+        'and call guide_next_step() immediately. If a reminder message ' +
+        'arrives instead, gently remind them once, then keep waiting.',
     };
   }
 
@@ -2382,23 +2382,41 @@
       msg +=
         'The citizen is still on the same page. ' +
         'Next step is "' + (nextStep ? nextStep.id : 'done') + '". ' +
-        'This is a REDUNDANT backup signal: the guide_next_step()/start_service() ' +
-        'tool result for this step already told you the same thing. ' +
-        'If you have already spoken that line and called guide_next_step(), ' +
-        'ignore this message. Otherwise speak the line above and call ' +
-        'guide_next_step() now.';
+        'This is the signal that the click actually happened — the ' +
+        'guide_next_step() result you got when you started pointing only ' +
+        'told you to wait, not that it was clicked. Speak the line above ' +
+        'now, then call guide_next_step() immediately.';
     }
 
-    // Also try sending immediately (may succeed if WebSocket is still up)
+    sendRoomText(msg);
+  }
+
+  // Sent when a same-page pointing step's click never arrived within the
+  // normal wait window. Gentle, one-time — the pointer stays on screen
+  // either way, so there's nothing else to do but nudge once.
+  function sendStillWaitingNotification(step) {
+    const msg =
+      '[STILL WAITING — system message] The citizen has not yet clicked ' +
+      'the highlighted item for "' + (step.action_label || step.id) + '". ' +
+      'Gently remind them once (in Urdu) to tap the highlighted item, then ' +
+      'wait quietly again — do not call any tool right now.';
+    sendRoomText(msg);
+  }
+
+  // Shared best-effort send used by both notifications above: try sendText
+  // first, fall back to publishData, and never throw either way — this is
+  // always a redundant/secondary signal, not something worth surfacing an
+  // error for.
+  function sendRoomText(msg) {
     if (!maryamRoom || !maryamConnected) return;
     maryamRoom.localParticipant
       .sendText(msg, { topic: 'lk.chat' })
       .catch(function (err) {
-        console.warn('[Maryam] sendClickNotification text failed (will replay via sessionStorage on next page):', err);
+        console.warn('[Maryam] sendRoomText failed, trying publishData:', err);
         maryamRoom.localParticipant
           .publishData(new TextEncoder().encode(msg), { reliable: true, topic: 'lk.chat' })
           .catch(function (e2) {
-            console.warn('[Maryam] sendClickNotification data also failed:', e2);
+            console.warn('[Maryam] sendRoomText data also failed:', e2);
           });
       });
   }
@@ -3084,6 +3102,12 @@
       recovery_ur: 'Page scroll nahi kar saki. User ko kahein ke woh khud ' +
                    'thora neeche scroll karein.',
     },
+    {
+      name: 'end_session',
+      handler: handleEndSession,
+      recovery_ur: 'Session band karne mein masla aaya — koi baat nahi, ' +
+                   'aap chahein to khud mic button se session band kar sakte hain.',
+    },
   ];
 
   // -------------------------------------------------------------------
@@ -3216,6 +3240,19 @@
       console.warn('[Maryam] Could not replay pending click:', e);
     }
 
+    // A previous session was manually ended while a flow/quick action was
+    // still active — the citizen has now reconnected. Ask before resuming
+    // instead of either forgetting it or barreling ahead unasked.
+    let resumeAfterEnd = false;
+    try {
+      if (sessionStorage.getItem(RESUME_PENDING_KEY)) {
+        sessionStorage.removeItem(RESUME_PENDING_KEY);
+        resumeAfterEnd = true;
+      }
+    } catch (e) {
+      console.warn('[Maryam] Could not read resume-pending flag:', e);
+    }
+
     const live = buildLiveContext();
     let text;
 
@@ -3225,35 +3262,62 @@
       // the agent can resume correctly even without prior conversation context.
       const flow = loadFlow();
       const briefing = flow ? buildFlowBriefing(flow) : '';
-      text =
-        '[PAGE UPDATE — ACTION REQUIRED] You already have full context on ' +
-        'this citizen and exactly where they are in this flow (see below) ' +
-        '— do NOT act confused, do NOT re-introduce yourself, and do NOT ' +
-        'go quiet waiting for the citizen to speak first. ' +
-        'CALL guide_next_step() NOW, then IMMEDIATELY speak its ' +
-        'presentationInstructions line out loud in this same turn — the ' +
-        'highlight on screen means nothing to the citizen until you say ' +
-        'what to do with it. ' +
-        briefing + ' ' +
-        'Guided flow "' + live.guided_flow.service_key +
-        '" is ACTIVE at step "' + live.guided_flow.current_step +
-        '" (' + live.guided_flow.step_number + '/' + live.guided_flow.total_steps + '). ' +
-        'Citizen is now on the "' + live.page + '" page (' + reason + '). ' +
-        'Technical context: ' + JSON.stringify(live);
+      text = resumeAfterEnd
+        ? '[SESSION RESUMED — ACTION REQUIRED] The citizen ended the ' +
+          'previous session while this guided flow was still in progress, ' +
+          'and has just reconnected. Greet them normally, then in ONE ' +
+          'short line mention what you were doing last time and ask if ' +
+          'they want to continue — for example: "Pichli dafa hum "' +
+          live.guided_flow.service_key + '" ke silsile mein "' +
+          live.guided_flow.current_step + '" step par thay — kya aap yehi ' +
+          'jaari rakhna chahte hain?" Wait for their answer before calling ' +
+          'guide_next_step(). If they say yes, call guide_next_step() and ' +
+          'speak its presentationInstructions right away. If they say no ' +
+          'or want something else, help with that instead — do not force ' +
+          'the old flow. ' +
+          briefing + ' ' +
+          'Guided flow "' + live.guided_flow.service_key +
+          '" is PAUSED at step "' + live.guided_flow.current_step +
+          '" (' + live.guided_flow.step_number + '/' + live.guided_flow.total_steps + '). ' +
+          'Citizen is now on the "' + live.page + '" page. ' +
+          'Technical context: ' + JSON.stringify(live)
+        : '[PAGE UPDATE — ACTION REQUIRED] You already have full context on ' +
+          'this citizen and exactly where they are in this flow (see below) ' +
+          '— do NOT act confused, do NOT re-introduce yourself, and do NOT ' +
+          'go quiet waiting for the citizen to speak first. ' +
+          'CALL guide_next_step() NOW, then IMMEDIATELY speak its ' +
+          'presentationInstructions line out loud in this same turn — the ' +
+          'highlight on screen means nothing to the citizen until you say ' +
+          'what to do with it. ' +
+          briefing + ' ' +
+          'Guided flow "' + live.guided_flow.service_key +
+          '" is ACTIVE at step "' + live.guided_flow.current_step +
+          '" (' + live.guided_flow.step_number + '/' + live.guided_flow.total_steps + '). ' +
+          'Citizen is now on the "' + live.page + '" page (' + reason + '). ' +
+          'Technical context: ' + JSON.stringify(live);
     } else if (live.quick_action) {
-      // Quick actions never navigate away from services.html, so this
-      // path is rare — a LiveKit reconnect (e.g. after an audio drop)
-      // while the offcanvas is still open. Same "you already have
-      // context" framing as the guided-flow branch above.
-      text =
-        '[PAGE UPDATE — ACTION REQUIRED] You already have full context on ' +
-        'this citizen\'s quick action (see below) — do NOT act confused. ' +
-        'CALL guide_next_step() NOW, then IMMEDIATELY speak its ' +
-        'presentationInstructions line out loud in this same turn. ' +
-        'Quick action "' + live.quick_action.action_key +
-        '" is ACTIVE at phase "' + live.quick_action.phase + '". ' +
-        'Citizen is now on the "' + live.page + '" page (' + reason + '). ' +
-        'Technical context: ' + JSON.stringify(live);
+      // Quick actions never navigate away from services.html, so outside
+      // the resumeAfterEnd case this path is rare — a LiveKit reconnect
+      // (e.g. after an audio drop) while the offcanvas is still open.
+      text = resumeAfterEnd
+        ? '[SESSION RESUMED — ACTION REQUIRED] The citizen ended the ' +
+          'previous session mid-way through this quick action, and has ' +
+          'just reconnected. Greet them normally, mention what you were ' +
+          'doing ("' + live.quick_action.action_key + '") in one short ' +
+          'line, and ask if they want to continue before calling ' +
+          'guide_next_step(). If they say no or want something else, help ' +
+          'with that instead. Quick action "' + live.quick_action.action_key +
+          '" is PAUSED at phase "' + live.quick_action.phase + '". ' +
+          'Citizen is now on the "' + live.page + '" page. ' +
+          'Technical context: ' + JSON.stringify(live)
+        : '[PAGE UPDATE — ACTION REQUIRED] You already have full context on ' +
+          'this citizen\'s quick action (see below) — do NOT act confused. ' +
+          'CALL guide_next_step() NOW, then IMMEDIATELY speak its ' +
+          'presentationInstructions line out loud in this same turn. ' +
+          'Quick action "' + live.quick_action.action_key +
+          '" is ACTIVE at phase "' + live.quick_action.phase + '". ' +
+          'Citizen is now on the "' + live.page + '" page (' + reason + '). ' +
+          'Technical context: ' + JSON.stringify(live);
     } else {
       text =
         '[PAGE UPDATE — system message, not the citizen speaking] ' +
@@ -3727,5 +3791,6 @@
     handleGetServiceJourney, handleStartQuickAction,
     loadQuickActionFlow, executeCurrentQuickActionStep,
     preRenderPendingFlowStep, preRenderPendingQuickActionStep,
+    endSession, handleEndSession,
   };
 })();
