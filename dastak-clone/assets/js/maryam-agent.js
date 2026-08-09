@@ -2671,7 +2671,9 @@
         labelMap[e.element_id] = e.label_en || e.label_ur || e.label;
       });
     }
-    const targetLabel = labelMap[selector] || selector;
+    // Never fall back to the raw CSS selector here — that's internal
+    // plumbing, not something a citizen should ever see on screen.
+    const targetLabel = labelMap[selector] || 'the highlighted item';
     setStatus('Click here: ' + targetLabel);
     setNextStep(opts.actionLabel || ('Click "' + targetLabel + '".'));
 
@@ -2792,7 +2794,9 @@
 
     movePointerTo(el);
     triggerPulse();
-    setNextStep(opts.actionLabel || ('Complete: ' + selector));
+    // Never fall back to the raw CSS selector here — internal plumbing,
+    // not something a citizen should ever see on screen.
+    setNextStep(opts.actionLabel || 'Complete the highlighted step.');
 
     if (el.classList.contains(conditionClass)) {
       hidePointer();
