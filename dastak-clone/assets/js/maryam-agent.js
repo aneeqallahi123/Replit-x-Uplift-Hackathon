@@ -332,7 +332,7 @@
       action_label: 'Click the "Apply Service" button.',
       // say_now: spoken as soon as the pointer appears (agent is free to talk)
       say_now: 'Theek hai! Pehle main aapko Services page par le chalti hoon. ' +
-               'Screen par relevant button highlight ho gaya hai — uss par click karein.',
+               'Screen par button highlight ho gaya hai — ab isi waqt uss par click karein.',
       say_after: 'Services page khul raha hai — ek second mein wahan pohonch jaayenge.',
     },
     {
@@ -344,9 +344,9 @@
       navigates: false,
       action_label: 'Click the highlighted service card.',
       say_now: 'Ab main "Renewal of Regular License" card highlight kar rahi hoon. ' +
-               'Uss highlighted card par click karein.',
-      say_after: 'Ab agla qadam yeh hai: apply karne ka tareeqa chunein — ' +
-                 'Self Service ya Doorstep.',
+               'Ab isi waqt uss highlighted card par click karein.',
+      say_after: 'Service khul gayi hai. Ab agla qadam yeh hai: apply karne ka ' +
+                 'tareeqa chunein — Self Service ya Doorstep.',
     },
     {
       id: 'select_mode',
@@ -356,8 +356,10 @@
       },
       navigates: false,
       action_label: 'Choose Self Service or Doorstep Service.',
-      say_now: 'Bilkul. Main aapka pasandida tareeqa highlight kar rahi hoon — uss par click karein.',
-      say_after: 'Ab agla qadam yeh hai: highlighted Apply button dabayein.',
+      say_now: 'Bilkul. Main aapka pasandida tareeqa highlight kar rahi hoon — ' +
+               'ab isi waqt uss par click karein.',
+      say_after: 'Tareeqa select ho gaya hai. Ab agla qadam yeh hai: highlighted ' +
+                 'Apply button dabayein.',
     },
     {
       id: 'apply',
@@ -365,7 +367,8 @@
       selector: function () { return '.btn-apply-service'; },
       navigates: true,
       action_label: 'Click the "Apply" button.',
-      say_now: 'Apply button highlight ho gaya hai — uss par click karein taake application form khule.',
+      say_now: 'Apply button highlight ho gaya hai — ab isi waqt uss par click ' +
+               'karein taake application form khule.',
       say_after: 'Application form khul raha hai — ek second mein wahan pohonch jaayenge.',
     },
     {
@@ -482,6 +485,47 @@
       if (FLOW_STEPS[i].page === pageKey) return i;
     }
     return 0;
+  }
+
+  // Shows the pending step's highlight the instant a page loads, purely
+  // client-side — it does NOT wait for the remote agent to call
+  // guide_next_step(). The agent's own call (whenever it lands) just
+  // re-points at the same element, which is harmless. Without this, the
+  // citizen sees a blank page for however long the agent takes to react
+  // to the [PAGE UPDATE] message, which reads as Maryam having lost
+  // track of the flow.
+  function preRenderPendingFlowStep() {
+    const flow = loadFlow();
+    if (!flow) return;
+    const step = FLOW_STEPS[flow.stepIndex];
+    if (!step || step.page !== getCurrentPageKey()) return;
+
+    setNextStep(step.action_label);
+
+    // Form/captcha/finish steps don't point at a fixed selector up front —
+    // form fields are filled one at a time and the captcha only appears
+    // once the form is complete, so there is nothing to pre-highlight yet.
+    if (step.form || step.captcha || step.finish || !step.selector) return;
+
+    let selector;
+    try {
+      selector = step.selector(flow);
+    } catch (e) {
+      return;
+    }
+
+    const existing = document.querySelector(selector) ||
+      (step.fallbackSelector && document.querySelector(step.fallbackSelector));
+    if (existing) {
+      movePointerTo(existing);
+      triggerPulse();
+      return;
+    }
+    // Element may render slightly after DOMContentLoaded (e.g. behind a
+    // brief loading state) — give it a short window before giving up.
+    waitForElement(selector, 4000)
+      .then(function (el) { movePointerTo(el); triggerPulse(); })
+      .catch(function () { /* agent's own guide_next_step() will retry */ });
   }
 
   // -------------------------------------------------------------------
@@ -671,9 +715,19 @@
         display: flex;
         animation: maryamPanelIn 0.2s ease-out;
       }
+      #maryam-panel.open.no-anim {
+        animation: none;
+      }
       @keyframes maryamPanelIn {
         from { opacity: 0; transform: scale(0.94) translateY(8px); }
         to   { opacity: 1; transform: scale(1) translateY(0); }
+      }
+      /* While the panel is expanded it already shows the avatar, name and
+         live status — the collapsed pill and persistent label underneath
+         it would just be a duplicate, overlapping copy of the same text. */
+      body.maryam-panel-open #maryam-status,
+      body.maryam-panel-open #maryam-label {
+        display: none !important;
       }
       .maryam-panel-header {
         display: flex;
@@ -876,17 +930,40 @@
     });
   }
 
-  function openPanel() {
+  // Persisted across page navigations — a citizen mid-guided-flow who
+  // had the panel open shouldn't have it silently collapse just because
+  // clicking a highlighted button loaded a new page.
+  const PANEL_OPEN_KEY = 'maryam_panel_open';
+
+  // skipAnimation: used when restoring the panel's open state on a fresh
+  // page load — it should already be there, not visibly pop in.
+  function openPanel(skipAnimation) {
     const panel = document.getElementById('maryam-panel');
-    if (panel) panel.classList.add('open');
+    if (!panel) return;
+    if (skipAnimation) panel.classList.add('no-anim');
+    panel.classList.add('open');
+    document.body.classList.add('maryam-panel-open');
+    sessionStorage.setItem(PANEL_OPEN_KEY, '1');
+    if (skipAnimation) {
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () { panel.classList.remove('no-anim'); });
+      });
+    }
   }
   function closePanel() {
     const panel = document.getElementById('maryam-panel');
-    if (panel) panel.classList.remove('open');
+    if (panel) panel.classList.remove('open', 'no-anim');
+    document.body.classList.remove('maryam-panel-open');
+    sessionStorage.removeItem(PANEL_OPEN_KEY);
   }
   function togglePanel() {
     const panel = document.getElementById('maryam-panel');
-    if (panel) panel.classList.toggle('open');
+    if (!panel) return;
+    if (panel.classList.contains('open')) {
+      closePanel();
+    } else {
+      openPanel();
+    }
   }
 
   // Human-readable defaults for the panel's activity row. Keep these
@@ -1510,9 +1587,10 @@
         navigates: true,
         waiting_for_click: true,
         presentationInstructions:
-          'SPEAK THIS AS SOON AS THE POINTER APPEARS — do not highlight silently: "' +
+          'SPEAK THIS RIGHT NOW, in this same turn — do not highlight ' +
+          'silently and wait: "' +
           (step.say_now ||
-            'Relevant button highlight ho gaya hai. Uss par click karein.') +
+            'Button highlight ho gaya hai — ab isi waqt uss par click karein.') +
           '" Uss click se naya page khulega. Koi tool call na karein — ' +
           'agla [PAGE UPDATE] message aane ka intezaar karein, phir ' +
           'foran guide_next_step() call karein.',
@@ -1531,11 +1609,13 @@
         step: step.id,
         clicked: true,
         presentationInstructions:
-          'SPEAK THIS NOW, do not stay silent — say exactly: "' +
-          (step.say_after || 'Ab agla qadam yeh hai.') +
-          '" — then immediately call guide_next_step(). Do NOT thank or ' +
-          'praise the citizen for the previous click; go straight to ' +
-          'what comes next.',
+          'SPEAK THIS RIGHT NOW, in this same turn — do not stay silent: "' +
+          (step.say_after || 'Yeh step ho gaya. Ab agla qadam yeh hai.') +
+          '" — then immediately call guide_next_step(). This line already ' +
+          'confirms what just happened in factual terms before naming the ' +
+          'next step — do not ALSO thank or praise the citizen ("shabash", ' +
+          '"bohat acha") on top of it, and do not skip the confirmation ' +
+          'either; say the line exactly as given.',
       };
     }
 
@@ -2248,8 +2328,14 @@
       const flow = loadFlow();
       const briefing = flow ? buildFlowBriefing(flow) : '';
       text =
-        '[PAGE UPDATE — ACTION REQUIRED] ' +
-        'CALL guide_next_step() NOW before speaking anything. ' +
+        '[PAGE UPDATE — ACTION REQUIRED] You already have full context on ' +
+        'this citizen and exactly where they are in this flow (see below) ' +
+        '— do NOT act confused, do NOT re-introduce yourself, and do NOT ' +
+        'go quiet waiting for the citizen to speak first. ' +
+        'CALL guide_next_step() NOW, then IMMEDIATELY speak its ' +
+        'presentationInstructions line out loud in this same turn — the ' +
+        'highlight on screen means nothing to the citizen until you say ' +
+        'what to do with it. ' +
         briefing + ' ' +
         'Guided flow "' + live.guided_flow.service_key +
         '" is ACTIVE at step "' + live.guided_flow.current_step +
@@ -2654,7 +2740,22 @@
     // simply died. agentNavigated is still read (in
     // connectAndRegisterTools) to label the page-context push, but it is
     // no longer what decides whether we reconnect.
+    // Restore the expanded panel's open state across navigation — only
+    // meaningful if a session is actually expected to reconnect below.
     const saved = loadSavedSession();
+    if (saved && sessionStorage.getItem(PANEL_OPEN_KEY) === '1') {
+      openPanel(true);
+    } else {
+      sessionStorage.removeItem(PANEL_OPEN_KEY);
+    }
+
+    // If a guided flow is already mid-way through on this exact page,
+    // highlight the pending element immediately — do not wait for the
+    // agent's own guide_next_step() tool call, which can lag a few
+    // seconds behind the page load and reads as Maryam having forgotten
+    // where the citizen was.
+    preRenderPendingFlowStep();
+
     if (saved) {
       setTimeout(async () => {
         setStatus('Reconnecting to Maryam...', true);
