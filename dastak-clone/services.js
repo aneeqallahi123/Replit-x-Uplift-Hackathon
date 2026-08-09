@@ -109,7 +109,11 @@ function buildPanel(key) {
     </div>`;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function initServicesPage() {
+    // Guard: this file's script tag is now loaded on every page (so any
+    // page can host services.html's fragment via the router), but this
+    // init only makes sense when the services markup is actually mounted.
+    if (!document.getElementById('dlimsServiceRow')) return;
 
     // Citizen / Business toggle — visual only
     document.querySelectorAll('.toggle-btn').forEach(btn => {
@@ -190,7 +194,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('Please select an application method.');
                 return;
             }
-            window.location.href = `apply.html?service=${encodeURIComponent(serviceKey)}&mode=${applyBtn.dataset.mode}`;
+            const target = `apply.html?service=${encodeURIComponent(serviceKey)}&mode=${applyBtn.dataset.mode}`;
+            if (window.__maryamRouter && window.__maryamRouter.navigateTo) {
+                window.__maryamRouter.navigateTo(target);
+            } else {
+                window.location.href = target;
+            }
         });
     }
 
@@ -269,4 +278,11 @@ document.addEventListener('DOMContentLoaded', () => {
         bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('trackdlimsOffcanvas')).show();
         history.replaceState(null, '', window.location.pathname);
     }
-});
+}
+window.initServicesPage = initServicesPage;
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initServicesPage);
+} else {
+    initServicesPage();
+}

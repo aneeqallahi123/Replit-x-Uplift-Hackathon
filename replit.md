@@ -31,6 +31,26 @@ schema/timeout to match `maryam-agent.js`.
 
 ## Architecture
 - `server.js` — minimal Express static server; `POST /api/session` proxies Uplift session creation so `UPLIFT_API_KEY` never reaches the browser; `/api/config` is a stub.
+- **Persistent app shell.** `index.html` / `services.html` / `apply.html` are
+  still three separate documents, but only one is ever actually navigated
+  to per visit. `assets/js/router.js` intercepts in-app link clicks (and
+  `navigate_to_page`), fetches the target page, and swaps only the
+  `<main id="page-root">` region via `fetch` + `replaceWith` +
+  `history.pushState`. The Maryam widget markup (injected onto `<body>` by
+  `maryam-agent.js`, outside `#page-root`) and every `<script>` tag never
+  get torn down, so the LiveKit room/session survives in-app navigation —
+  no reconnect, no new agent-worker join, no re-prompted mic permission.
+  Each page's setup code is a callable `window.init*Page()` function
+  (`initHomePage`/`initServicesPage`/`initApplyPage`), still also bound to
+  `DOMContentLoaded` for the very first real load; the router calls the
+  matching one after every swap. `assets/css/page-extras.css` holds the
+  union of all three pages' bespoke styles, and every page loads the full
+  script/style set, since any one of them can end up hosting any other
+  page's fragment. A hard refresh or direct URL load is still a real
+  reload — `maryam-agent.js` pre-warms `createNewSession()` on
+  `DOMContentLoaded` (in parallel with the rest of setup) to cut that
+  cold-start latency, but a full reconnect there is unavoidable and
+  accepted.
 - Voice: the browser connects to a remote Uplift AI realtime assistant over LiveKit (`dastak-clone/assets/js/maryam-agent.js`). STT/TTS/LLM all run remotely; the browser registers RPC tools the agent calls:
   - `get_page_context` — page config + live DOM/form state
   - `get_service_journey` — the full field list/validation/captcha info for a service or quick action (`SERVICE_JOURNEYS`/`QUICK_ACTION_JOURNEYS` — the same data the flow engine itself uses, so the tool and the actual behavior can't drift apart)
@@ -48,13 +68,18 @@ schema/timeout to match `maryam-agent.js`.
 - The captcha step watches the input, not clicks: the citizen clicks the box and
   *then* types, so a click listener can never observe the answer.
 - Guided flow state persists in `sessionStorage` (`maryam_flow`) so it survives
-  page navigations, and expires after 30 minutes. On reconnect the browser
-  pushes a `[PAGE UPDATE]` text message with the current page and flow step,
-  after waiting for the remote agent participant to actually join.
-- **A fresh Uplift session is created on every page.** The saved token is never
-  reused: the agent worker ends its session when the human participant
-  disconnects, so a resumed token lands in a room with no agent in it. The
-  `[PAGE UPDATE]` re-briefing is what carries the flow across pages.
+  page navigations, and expires after 30 minutes. The router pushes a
+  `[PAGE UPDATE]` text message (via `pushPageContext`) with the current page
+  and flow step immediately after every in-app swap — the room is already
+  connected and the agent has already joined, so there's no reconnect to
+  wait on anymore.
+- **Only one real Uplift session is created per browser tab now.** The
+  reload-era "mint a fresh session on every page" machinery
+  (`maryam_pending_click` replay, the `agentNavigated` flag, the
+  auto-reconnect-on-`DOMContentLoaded` block) is all still in the code as a
+  safety net for the one remaining real-reload case — a hard refresh or a
+  directly-typed/bookmarked URL — but in-app navigation via the router
+  never triggers it, because the room never disconnects in the first place.
 - Forms are demo-only; nothing is submitted to a real backend.
 
 ## Debugging

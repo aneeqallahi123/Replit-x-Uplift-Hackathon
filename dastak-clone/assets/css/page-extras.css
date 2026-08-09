@@ -1,0 +1,302 @@
+/* Page-specific style rules, consolidated into one shared stylesheet so
+   every page (index.html / services.html / apply.html) has them
+   available regardless of which one the browser actually loaded first.
+   With the client-side router (assets/js/router.js), only ONE of these
+   three documents is ever a real navigation target — the other two are
+   fetched and only their #page-root fragment is spliced in — so the
+   fragment's classes need styling no matter which page is hosting it. */
+
+/* ---- from index.html ---- */
+.live-search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    max-height: 450px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: none;
+    z-index: 9999999;
+    padding: 15px;
+    margin-top: 5px;
+}
+
+.position-relative-custom { position: relative; }
+.services-controls { position: relative; z-index: 2; }
+
+.search-department {
+    padding: 5px 15px 10px 15px;
+    font-weight: 600;
+    color: #4b5563;
+    font-size: 16px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.search-clear-icon {
+    right: 15px !important;
+    font-size: 16px;
+    color: #999;
+    cursor: pointer;
+    display: none;
+    z-index: 5;
+}
+
+.search-clear-icon:hover { color: #333; }
+.home_page_search { padding-right: 40px; }
+
+.explore_slide_item.hidden { display: none !important; }
+
+/* ---- from services.html ---- */
+.dlims-header-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 0;
+}
+
+.dlims-header-actions .btn {
+    font-size: 12.5px;
+    padding: 8px 16px;
+    white-space: nowrap;
+}
+
+.demo-banner {
+    background: #fff9e6;
+    border-left: 4px solid #f5bb18;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: #6b5f2f;
+    margin-bottom: 24px;
+}
+
+.demo-note {
+    background: #f1f8f3;
+    border: 1px dashed #167B38;
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 13px;
+    color: #167B38;
+    margin-top: 12px;
+    display: none;
+}
+
+.demo-note.show { display: block; }
+
+.service-card-item.locked {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.accordion-item.dept-disabled {
+    opacity: 0.5;
+}
+
+.accordion-item.dept-disabled .accordion-button {
+    cursor: not-allowed;
+    pointer-events: none;
+    background: #f5f5f5;
+}
+
+.accordion-item.dept-disabled .accordion-button::after {
+    opacity: 0.4;
+}
+
+.wizard-dot {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: #dee2e6; color: #888; font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; transition: background .3s, color .3s;
+}
+.wizard-dot-active { background: #167B38 !important; color: #fff !important; }
+.wizard-dot-done   { background: #167B38 !important; color: #fff !important; }
+.wizard-step-panel { animation: fadeIn .2s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---- from apply.html ---- */
+.apply-page-wrap {
+    padding-top: 100px;
+    padding-bottom: 60px;
+    padding-left: 2%;
+    padding-right: 2%;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: #f7f7f7;
+    color: #272e26;
+    margin-right: 10px;
+    text-decoration: none;
+}
+.back-link:hover { background: #eee; color: #167B38; }
+
+.service-title-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 24px;
+}
+.service-title-row h1 {
+    font-size: 26px;
+    font-weight: 700;
+    color: #272e26;
+    margin: 0;
+}
+
+.new-application-card {
+    background: #f9fafb;
+    border-radius: 16px;
+    padding: 28px;
+}
+
+.new-application-card .form-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #272e26;
+}
+.new-application-card .form-label .req { color: #dc3545; }
+
+.new-application-card .form-control,
+.new-application-card .form-select {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+}
+
+.new-application-card h6.section-heading {
+    font-weight: 700;
+    font-size: 16px;
+    color: #272e26;
+    margin: 28px 0 16px;
+}
+.new-application-card h6.section-heading:first-of-type { margin-top: 0; }
+
+.avatar-upload-circle {
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    background: #eef1ee;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 44px;
+    color: #b7bdb9;
+    overflow: hidden;
+    margin: 0 auto 10px;
+}
+.avatar-upload-circle img { width: 100%; height: 100%; object-fit: cover; }
+
+.upload-tip {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    margin-bottom: 18px;
+}
+.upload-tip:last-child { margin-bottom: 0; }
+.upload-tip-badge {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: #fff;
+    border: 1.5px solid #e5e7eb;
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #b7bdb9;
+    font-size: 18px;
+}
+.upload-tip-badge .status-dot {
+    position: absolute;
+    bottom: -3px;
+    right: -3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #fff;
+    border: 2px solid #fff;
+}
+.status-dot.bad { background: #dc3545; }
+.status-dot.good { background: #167B38; }
+.upload-tip h6 { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+.upload-tip p { font-size: 12.5px; color: #838e91; margin: 0; }
+
+.cnic-dropzone {
+    border: 1.5px dashed #d1d5db;
+    border-radius: 14px;
+    background: #fff;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: 0.2s;
+}
+.cnic-dropzone:hover { border-color: #167B38; background: #f7fdf9; }
+.cnic-dropzone .cnic-icon { font-size: 30px; color: #d1d5db; margin-bottom: 8px; }
+.cnic-dropzone .upload-btn-circle {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--secondary-color); color: #272e26;
+    display: flex; align-items: center; justify-content: center;
+    margin: 8px auto; font-size: 16px;
+}
+.cnic-dropzone h6 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.cnic-dropzone p { font-size: 12px; color: #838e91; margin: 0; }
+.cnic-dropzone.has-file { border-color: #167B38; background: #f7fdf9; }
+.cnic-dropzone img.preview-thumb { max-width: 100%; max-height: 90px; border-radius: 8px; margin-bottom: 8px; }
+
+.warn-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    color: #6b5f2f;
+    margin-bottom: 16px;
+}
+.warn-note i { color: #dc3545; font-size: 20px; }
+
+#successView { display: none; }
+
+.sidebar-toggle-btn {
+    display: none;
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    z-index: 1200;
+    background: #167B38;
+    color: #fff;
+    border: none;
+    border-radius: 30px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.2);
+}
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 1050;
+}
+@media (max-width: 991px) {
+    .sidebar-toggle-btn { display: inline-flex; align-items: center; gap: 8px; }
+    .sidebar-backdrop.show { display: block; }
+}
+
+/* apply.html sets body{background:#fff} globally; harmless on the other
+   two pages, which already render on a white background. */
+body { background: #fff; }

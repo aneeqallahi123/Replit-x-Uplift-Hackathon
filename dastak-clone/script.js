@@ -1,7 +1,17 @@
-// Preloader
-window.addEventListener('load', () => {
+// Runs once per real browser page load (never on a router-driven swap
+// back to the homepage) — the knock/door splash is a first-impression
+// effect, not something that should replay every time the citizen
+// navigates back to "/".
+let homePageEverInitialized = false;
+let homeScrollListenersBound = false;
+let homeAnimObserver = null;
+let homeScrollSpyObserver = null;
+
+function dismissPreloader() {
     const preloader = document.getElementById('preloader');
-    if (preloader) {
+    if (!preloader) return;
+    if (!homePageEverInitialized) {
+        // First real load — keep the original timed animation.
         setTimeout(() => {
             preloader.classList.add('loaded');
             document.body.classList.add('page-loaded');
@@ -9,23 +19,41 @@ window.addEventListener('load', () => {
                 document.querySelectorAll('.home_3_hero .animate-on-scroll').forEach(el => el.classList.add('is-visible'));
             }, 600);
         }, 200);
+    } else {
+        // Router swapped the homepage fragment back in — the fetched
+        // markup has a fresh, un-dismissed #preloader. Skip the splash.
+        preloader.classList.add('loaded');
+        document.body.classList.add('page-loaded');
+        document.querySelectorAll('.home_3_hero .animate-on-scroll').forEach(el => el.classList.add('is-visible'));
     }
-});
+}
 
-document.addEventListener('DOMContentLoaded', () => {
+function initHomePage() {
+    dismissPreloader();
+    homePageEverInitialized = true;
 
     // Navbar scroll effect
-    const navbar = document.querySelector('.navbar');
-    window.addEventListener('scroll', () => {
-        if (window.scrollY > 50) {
-            navbar.classList.add('scrolled', 'shadow-sm');
-        } else {
-            navbar.classList.remove('scrolled', 'shadow-sm');
-        }
-    });
+    // Window-level listeners are bound once ever (not once per mount) and
+    // re-query the live elements each time, so they keep working after a
+    // router-driven remount without piling up duplicate listeners.
+    if (!homeScrollListenersBound) {
+        homeScrollListenersBound = true;
+        window.addEventListener('scroll', () => {
+            const navbar = document.querySelector('.navbar');
+            if (navbar) {
+                navbar.classList.toggle('scrolled', window.scrollY > 50);
+                navbar.classList.toggle('shadow-sm', window.scrollY > 50);
+            }
+            const scrollUpBtn = document.getElementById('scrollUpBtn');
+            if (scrollUpBtn) scrollUpBtn.classList.toggle('show', window.scrollY > 300);
+        });
+    }
 
-    // Scroll-triggered animations
-    const observer = new IntersectionObserver((entries, obs) => {
+    // Scroll-triggered animations — disconnect any observer from a prior
+    // mount before creating a new one, so detached elements aren't held
+    // onto indefinitely across repeated home revisits.
+    if (homeAnimObserver) homeAnimObserver.disconnect();
+    homeAnimObserver = new IntersectionObserver((entries, obs) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 entry.target.classList.add('is-visible');
@@ -34,7 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }, { root: null, rootMargin: '0px 0px -50px 0px', threshold: 0.1 });
 
-    document.querySelectorAll('.animate-on-scroll:not(.home_3_hero *)').forEach(el => observer.observe(el));
+    document.querySelectorAll('.animate-on-scroll:not(.home_3_hero *)').forEach(el => homeAnimObserver.observe(el));
 
     // Close mobile offcanvas menu
     function closeMobileMenu() {
@@ -48,7 +76,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Scrollspy
     const sections = document.querySelectorAll('section[id], footer[id]');
     const navLinks = document.querySelectorAll('.nav-link');
-    const scrollSpyObserver = new IntersectionObserver(entries => {
+    if (homeScrollSpyObserver) homeScrollSpyObserver.disconnect();
+    homeScrollSpyObserver = new IntersectionObserver(entries => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 const id = entry.target.getAttribute('id');
@@ -58,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }, { threshold: 0.3 });
-    sections.forEach(section => scrollSpyObserver.observe(section));
+    sections.forEach(section => homeScrollSpyObserver.observe(section));
 
     // Smooth scroll for anchor links
     document.querySelectorAll('a[href^="#"]').forEach(anchor => {
@@ -75,12 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Scroll-up button
+    // Scroll-up button click handler (element-scoped — safe to rebind per mount)
     const scrollUpBtn = document.getElementById('scrollUpBtn');
     if (scrollUpBtn) {
-        window.addEventListener('scroll', () => {
-            scrollUpBtn.classList.toggle('show', window.scrollY > 300);
-        });
         scrollUpBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
     }
 
@@ -106,11 +132,25 @@ document.addEventListener('DOMContentLoaded', () => {
         cards.forEach(card => card.classList.remove('hidden'));
         serviceSearch.focus();
     });
-});
 
-// jQuery-driven sliders
-$(document).ready(function () {
-    if ($('.explore_services_slider').length) {
+    initHomeSliders();
+}
+window.initHomePage = initHomePage;
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initHomePage);
+} else {
+    initHomePage();
+}
+
+// jQuery-driven sliders — re-run on every mount (router swap-ins give the
+// slider elements a fresh, un-initialized DOM each time; slick tracks its
+// own "already initialized" state per element via the slick-initialized
+// class, so calling this again on the same live elements is a no-op).
+function initHomeSliders() {
+    if (typeof $ === 'undefined') return;
+
+    if ($('.explore_services_slider').length && !$('.explore_services_slider').hasClass('slick-initialized')) {
         $('.explore_services_slider').slick({
             dots: true,
             arrows: false,
@@ -128,7 +168,7 @@ $(document).ready(function () {
         });
     }
 
-    if ($('.partners_slider').length) {
+    if ($('.partners_slider').length && !$('.partners_slider').hasClass('slick-initialized')) {
         $('.partners_slider').slick({
             dots: false,
             arrows: false,
@@ -147,9 +187,10 @@ $(document).ready(function () {
         });
     }
 
-    $('.explore_services_slider, .partners_slider').on('mouseenter', function () {
-        $(this).slick('slickPause');
-    }).on('mouseleave', function () {
-        $(this).slick('slickPlay');
-    });
-});
+    $('.explore_services_slider, .partners_slider').off('mouseenter.homeSlider mouseleave.homeSlider')
+        .on('mouseenter.homeSlider', function () {
+            $(this).slick('slickPause');
+        }).on('mouseleave.homeSlider', function () {
+            $(this).slick('slickPlay');
+        });
+}

@@ -26,56 +26,16 @@
     <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick.min.css" />
     <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick-theme.min.css" />
 
+    <!-- Page-specific rules for all three pages, consolidated so any page
+         can host any other page's #page-root fragment (see router.js). -->
+    <link rel="stylesheet" href="assets/css/page-extras.css">
+
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-
-    <style>
-        .live-search-results {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-            max-height: 450px;
-            overflow-y: auto;
-            overflow-x: hidden;
-            display: none;
-            z-index: 9999999;
-            padding: 15px;
-            margin-top: 5px;
-        }
-
-        .position-relative-custom { position: relative; }
-        .services-controls { position: relative; z-index: 2; }
-
-        .search-department {
-            padding: 5px 15px 10px 15px;
-            font-weight: 600;
-            color: #4b5563;
-            font-size: 16px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .search-clear-icon {
-            right: 15px !important;
-            font-size: 16px;
-            color: #999;
-            cursor: pointer;
-            display: none;
-            z-index: 5;
-        }
-
-        .search-clear-icon:hover { color: #333; }
-        .home_page_search { padding-right: 40px; }
-
-        .explore_slide_item.hidden { display: none !important; }
-    </style>
 </head>
 
 <body class="home_3_body">
 
+<main id="page-root">
     <!-- Preloader: "The Dastak" (Knock) -->
     <div id="preloader">
         <div class="door-panel left-panel"></div>
@@ -576,14 +536,23 @@
 
     <!-- Scroll Up Button -->
     <button id="scrollUpBtn" class="scroll-up-btn" title="Go to top"><i class="fas fa-arrow-up"></i></button>
+</main>
 
-    <!-- Slick Slider JS -->
+    <!-- Everything below is shared shell infrastructure, deliberately
+         OUTSIDE #page-root — the router (assets/js/router.js) only ever
+         swaps #page-root's content, so none of this is ever torn down by
+         client-side navigation. Every page loads the full script set so
+         any page can host any other page's fragment. -->
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="assets/js/services-data.js?v=2"></script>
+    <script src="services.js?v=6"></script>
+    <script src="apply.js?v=2"></script>
     <script src="script.js"></script>
     <script src="assets/js/i18n.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
     <script src="assets/js/maryam-agent.js?v=2"></script>
+    <script src="assets/js/router.js"></script>
 </body>
 
 </html>

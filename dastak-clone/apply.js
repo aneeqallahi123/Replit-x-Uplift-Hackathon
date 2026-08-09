@@ -288,7 +288,12 @@ function renderLicenseLookupForm(withRenewalFields) {
         <button type="button" class="btn btn-success px-5 fw-bold py-2 mt-2" id="btnSubmitApplication">Submit</button>`;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+function initApplyPage() {
+    // Guard: apply.js now loads on every page (any page can host
+    // apply.html's fragment via the router) — this init only makes sense
+    // when the apply-page markup is actually mounted.
+    if (!document.getElementById('formCardBody')) return;
+
     const params = new URLSearchParams(window.location.search);
     const serviceKey = params.get('service') || 'learner_driving_license';
     const mode = params.get('mode') === 'doorstep' ? 'doorstep' : 'online';
@@ -558,4 +563,11 @@ document.addEventListener('DOMContentLoaded', () => {
         sidebar.classList.remove('show-sidebar');
         backdrop.classList.remove('show');
     });
-});
+}
+window.initApplyPage = initApplyPage;
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initApplyPage);
+} else {
+    initApplyPage();
+}

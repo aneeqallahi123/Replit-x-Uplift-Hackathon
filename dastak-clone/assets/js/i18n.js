@@ -262,4 +262,10 @@
     } else {
         initLangToggle();
     }
+
+    // Router-driven navigation swaps in a fresh #page-root fragment whose
+    // [data-i18n] elements haven't had the current language applied yet —
+    // re-run on every client-side page swap (initLangToggle is idempotent:
+    // it just re-applies and re-binds).
+    window.addEventListener('maryam:page-swapped', initLangToggle);
 })();

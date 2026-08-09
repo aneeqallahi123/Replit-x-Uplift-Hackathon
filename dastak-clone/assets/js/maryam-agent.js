@@ -2455,11 +2455,19 @@
       };
     }
 
-    // Flag so the next page auto-reconnects without another click
-    const saved = loadSavedSession();
-    if (saved) saveSession({ ...saved, agentNavigated: true });
-
-    window.location.href = url;
+    // The client-side router (assets/js/router.js) intercepts this exact
+    // same navigation for real <a> clicks — route through it here too, so
+    // Maryam's own navigate_to_page call no longer tears down the LiveKit
+    // room mid-flow. Fall back to a real reload only if the router script
+    // somehow failed to load.
+    if (window.__maryamRouter && window.__maryamRouter.navigateTo) {
+      window.__maryamRouter.navigateTo(url);
+    } else {
+      // Flag so the next page auto-reconnects without another click.
+      const saved = loadSavedSession();
+      if (saved) saveSession({ ...saved, agentNavigated: true });
+      window.location.href = url;
+    }
     return { navigated: true, target: url };
   }
 
@@ -3120,7 +3128,22 @@
   // We lose the agent's memory of earlier turns, but pushPageContext
   // re-briefs it with the full guided-flow state, which is what actually
   // matters for resuming the guidance.
+  // Kicked off immediately on DOMContentLoaded (see SECTION 9), in
+  // parallel with the rest of page setup, so the network round-trip for
+  // the very first session isn't waiting on the mic-button click too.
+  // One-shot: only the first real connect of the tab's lifetime benefits
+  // from it (the persistent-shell router means there is normally only
+  // ever one connect per tab at all — see connectAndRegisterTools).
+  let pendingSessionPromise = null;
+
   async function getOrResumeSession() {
+    if (pendingSessionPromise) {
+      const inFlight = pendingSessionPromise;
+      pendingSessionPromise = null;
+      const preWarmed = await inFlight;
+      if (preWarmed) return preWarmed;
+      // Pre-warm failed — fall through to a fresh attempt below.
+    }
     return createNewSession();
   }
 
@@ -3612,6 +3635,17 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
+    // Cold start (first real load, or a hard refresh) is the only case
+    // left where a real reconnect happens — start the network round-trip
+    // for it immediately, in parallel with the rest of setup, instead of
+    // waiting for the mic-button click. Saves real seconds off the
+    // visible "Connecting to Maryam..." delay; getOrResumeSession() picks
+    // this up whenever the first connect actually happens.
+    pendingSessionPromise = createNewSession().catch((err) => {
+      console.warn('[Maryam] Pre-warm session creation failed (will retry on connect):', err);
+      return null;
+    });
+
     injectPointerStylesOnce();
     injectPointerElements();
     bindMicButton();
@@ -3688,5 +3722,6 @@
     handleStartService, handleGuideNextStep, handleFillField,
     handleGetServiceJourney, handleStartQuickAction,
     loadQuickActionFlow, executeCurrentQuickActionStep,
+    preRenderPendingFlowStep, preRenderPendingQuickActionStep,
   };
 })();
