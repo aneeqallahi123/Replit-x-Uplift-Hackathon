@@ -3205,6 +3205,7 @@
   let maryamRoom = null;
   let maryamConnected = false;
   let maryamAudioPlaying = false; // tracks whether Maryam's audio element is unblocked
+  let maryamConnecting = false;   // guard against concurrent connectAndRegisterTools() calls
 
   // Build a human-readable briefing of the active guided flow so the
   // agent can resume cleanly even if the prior [CLICK] message was lost.
@@ -3483,6 +3484,12 @@
     if (typeof LivekitClient === 'undefined') {
       throw new Error('LivekitClient not loaded');
     }
+    if (maryamConnecting) {
+      console.warn('[Maryam] connectAndRegisterTools() already in progress — skipping duplicate call');
+      return;
+    }
+    maryamConnecting = true;
+    try {
 
     const micBtn = document.getElementById('maryam-mic-btn');
     console.log('[Maryam] Getting session...');
@@ -3657,18 +3664,65 @@
       room.remoteParticipants.size,
       agentPresent ? '(agent joined)' : '(TIMED OUT — pushing anyway)');
 
+    // Buffer: ParticipantConnected fires when the worker appears in the room,
+    // but its LLM session and data-channel subscription are not ready yet.
+    // Sending the greeting immediately races with that startup window and the
+    // message is silently dropped. A short wait lets the pipeline finish.
+    if (agentPresent) {
+      await delay(1200);
+    }
+
     await pushPageContext(reason);
 
-    // If nobody was there when the push fired, it went nowhere. Retry once.
-    if (room.remoteParticipants.size === 0) {
-      await delay(2000);
-      console.warn('[Maryam] No remote participant at push time — retrying. ' +
-        'Remote participants now:', room.remoteParticipants.size);
-      await pushPageContext(reason + ' (retry)');
+    // Retry the greeting until the agent responds with audio — audio-track
+    // subscription is the most reliable proxy for "the agent received the
+    // message and has started generating a response". Retrying on participant
+    // count alone (the old check) never triggered when the participant was
+    // present but the data pipeline wasn't ready.
+    const MAX_GREETING_RETRIES = 3;
+    for (let attempt = 1; attempt <= MAX_GREETING_RETRIES; attempt++) {
+      // Stop if the room was replaced by a concurrent connect (RC-1 safety).
+      if (!maryamConnected || maryamRoom !== room) break;
+
+      // Stop if the agent already responded (subscribed audio track present).
+      let agentHasAudio = false;
+      room.remoteParticipants.forEach(function (p) {
+        p.trackPublications.forEach(function (pub) {
+          if (pub.track && pub.track.kind === LivekitClient.Track.Kind.Audio) {
+            agentHasAudio = true;
+          }
+        });
+      });
+      if (agentHasAudio || maryamAudioPlaying) break;
+
+      // Stop if everyone left (disconnected mid-greeting).
+      if (room.remoteParticipants.size === 0) break;
+
+      await delay(3500);
+
+      // Re-check after the wait — agent may have responded while we waited.
+      if (!maryamConnected || maryamRoom !== room) break;
+      agentHasAudio = false;
+      room.remoteParticipants.forEach(function (p) {
+        p.trackPublications.forEach(function (pub) {
+          if (pub.track && pub.track.kind === LivekitClient.Track.Kind.Audio) {
+            agentHasAudio = true;
+          }
+        });
+      });
+      if (agentHasAudio || maryamAudioPlaying) break;
+
+      console.warn('[Maryam] No agent audio after ' + (attempt * 3.5) + 's — retrying greeting push (' +
+        attempt + '/' + MAX_GREETING_RETRIES + ')');
+      await pushPageContext(reason + ' (retry ' + attempt + ')');
     }
 
     await delay(500);
     setStatus('', false);
+
+    } finally {
+      maryamConnecting = false;
+    }
   }
 
   // -------------------------------------------------------------------
@@ -3694,6 +3748,10 @@
         togglePanel();
         return;
       }
+
+      // Connection already in progress (e.g. auto-reconnect) — ignore the
+      // click so we don't spin up a second concurrent room.
+      if (maryamConnecting) return;
 
       // First click — connect (this IS the user gesture)
       micBtn.disabled = true;
