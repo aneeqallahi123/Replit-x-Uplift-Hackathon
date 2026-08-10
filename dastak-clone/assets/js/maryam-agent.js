@@ -3669,13 +3669,27 @@
       });
     });
 
-    // ── Start with mic MUTED ─────────────────────────────────
-    // The agent greets first (via lk.chat text → agent-generated audio).
-    // The user's mic is not published at all until they press Unmute,
-    // which prevents ambient noise from cutting off the greeting and
-    // keeps the initial flow from breaking. The Unmute handler publishes
-    // the track with the proper constraints (48kHz mono) at that point.
-    console.log('[Maryam] Mic starting muted — user will press Unmute to speak');
+    // ── Publish mic track but start it muted ─────────────────
+    // The Uplift agent requires a published audio track to consider the
+    // session active and begin its greeting. Publishing with enabled:false
+    // (or muting immediately after) satisfies that requirement while
+    // preventing ambient noise from interrupting the greeting.
+    // The Unmute button re-enables audio when the user is ready to speak.
+    // Publish with proper constraints so the Uplift agent sees an active
+    // participant and begins its greeting, then immediately mute so no
+    // ambient audio reaches the agent before the user presses Unmute.
+    // setMicrophoneEnabled(false) on an already-published track mutes it
+    // in place (does not unpublish), keeping isMicrophoneEnabled in sync
+    // with the mute button state throughout the session.
+    await room.localParticipant.setMicrophoneEnabled(true, {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      sampleRate: 48000,
+      channelCount: 1,
+    });
+    await room.localParticipant.setMicrophoneEnabled(false);
+    console.log('[Maryam] Mic track published and muted — user will press Unmute to speak');
 
     maryamConnected = true;
     maryamReconnectAttempts = 0; // successful connect resets the backoff counter
