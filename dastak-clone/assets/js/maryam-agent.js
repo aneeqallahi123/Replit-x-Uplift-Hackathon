@@ -3206,6 +3206,8 @@
   let maryamConnected = false;
   let maryamAudioPlaying = false; // tracks whether Maryam's audio element is unblocked
   let maryamConnecting = false;   // guard against concurrent connectAndRegisterTools() calls
+  let maryamReconnectAttempts = 0;  // exponential-backoff counter for auto-reconnect
+  const MAX_RECONNECT_ATTEMPTS = 5;
 
   // Build a human-readable briefing of the active guided flow so the
   // agent can resume cleanly even if the prior [CLICK] message was lost.
@@ -3545,13 +3547,44 @@
       maryamConnected = false;
       const btn = document.getElementById('maryam-mic-btn');
       if (btn) {
-        setMicIcon(btn, '⚠️');
-        btn.classList.remove('connected', 'listening', 'speaking');
-        btn.classList.add('error');
-        btn.title = 'Connection lost — click to reconnect';
+        setMicIcon(btn, '⏳');
+        btn.classList.remove('connected', 'listening', 'speaking', 'error');
+        btn.classList.add('connecting');
+        btn.title = 'Reconnecting...';
       }
-      setStatus('Connection lost — click to reconnect', true);
-      setActivity('error', 'Connection lost — click to reconnect.');
+
+      // Auto-reconnect with exponential backoff. The session token is expired
+      // or invalid after a drop, so always clear it before retrying.
+      if (maryamReconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        const backoffMs = Math.min(1000 * Math.pow(2, maryamReconnectAttempts), 16000);
+        maryamReconnectAttempts++;
+        console.log('[Maryam] Auto-reconnect attempt', maryamReconnectAttempts,
+          'in', backoffMs + 'ms');
+        setStatus('Reconnecting... (attempt ' + maryamReconnectAttempts + ')', true);
+        setActivity('connecting', 'Reconnecting...');
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        setTimeout(async () => {
+          // Bail if the user already clicked to reconnect manually.
+          if (maryamConnected || maryamConnecting) return;
+          try {
+            await connectAndRegisterTools();
+            maryamReconnectAttempts = 0; // reset on success
+          } catch (err) {
+            console.error('[Maryam] Auto-reconnect attempt', maryamReconnectAttempts, 'failed:', err);
+          }
+        }, backoffMs);
+      } else {
+        // Exhausted retries — surface the error and let the user act.
+        if (btn) {
+          setMicIcon(btn, '⚠️');
+          btn.classList.remove('connecting');
+          btn.classList.add('error');
+          btn.title = 'Connection lost — click to reconnect';
+        }
+        setStatus('Connection lost — click to reconnect', true);
+        setActivity('error', 'Connection lost — click to reconnect.');
+        maryamReconnectAttempts = 0; // reset so a manual click can try again
+      }
     });
 
     // ── Speaking indicators: log + visual feedback ───────────
@@ -3635,6 +3668,7 @@
     }
 
     maryamConnected = true;
+    maryamReconnectAttempts = 0; // successful connect resets the backoff counter
 
     // Update button to connected state
     if (micBtn) {
@@ -3753,7 +3787,9 @@
       // click so we don't spin up a second concurrent room.
       if (maryamConnecting) return;
 
-      // First click — connect (this IS the user gesture)
+      // First click (or manual reconnect after error) — reset backoff so
+      // a fresh attempt gets the full retry budget.
+      maryamReconnectAttempts = 0;
       micBtn.disabled = true;
       setMicIcon(micBtn, '⏳');
       micBtn.classList.add('connecting');
