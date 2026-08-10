@@ -1330,14 +1330,39 @@
     if (muteBtn) {
       muteBtn.addEventListener('click', async function () {
         if (!maryamConnected || !maryamRoom) return;
-        const wasOn = maryamRoom.localParticipant.isMicrophoneEnabled;
-        await maryamRoom.localParticipant.setMicrophoneEnabled(!wasOn);
-        const micBtn = document.getElementById('maryam-mic-btn');
-        setMicIcon(micBtn, wasOn ? '🔇' : '🎤');
-        if (micBtn) micBtn.classList.toggle('muted', wasOn);
-        muteBtn.textContent = wasOn ? '🔊 Unmute' : '🎤 Mute';
-        muteBtn.classList.toggle('is-muted', wasOn);
-        setActivity(wasOn ? 'muted' : 'connected');
+
+        // Read current state from the SDK — this is the ground truth and
+        // stays correct across reconnects regardless of any prior UI state.
+        const micIsOn = maryamRoom.localParticipant.isMicrophoneEnabled;
+
+        if (micIsOn) {
+          // Currently unmuted → mute
+          await maryamRoom.localParticipant.setMicrophoneEnabled(false);
+          const micBtn = document.getElementById('maryam-mic-btn');
+          setMicIcon(micBtn, '🔇');
+          if (micBtn) micBtn.classList.add('muted');
+          muteBtn.textContent = '🔊 Unmute';
+          muteBtn.classList.add('is-muted');
+          setActivity('muted');
+        } else {
+          // Currently muted → unmute. Pass audio constraints every time so
+          // the track is always published with the correct 48kHz mono spec
+          // (required for Uplift VAD), whether this is the first unmute or
+          // a re-unmute after a mute/reconnect cycle.
+          await maryamRoom.localParticipant.setMicrophoneEnabled(true, {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000,
+            channelCount: 1,
+          });
+          const micBtn = document.getElementById('maryam-mic-btn');
+          setMicIcon(micBtn, '🎤');
+          if (micBtn) micBtn.classList.remove('muted');
+          muteBtn.textContent = '🎤 Mute';
+          muteBtn.classList.remove('is-muted');
+          setActivity('connected');
+        }
       });
     }
 
@@ -3644,43 +3669,37 @@
       });
     });
 
-    // ── Enable mic (user gesture context — safe here) ───────
-    // Explicit constraints: clean mono 48kHz — what LiveKit's
-    // server-side VAD expects. Browser defaults vary and can
-    // cause VAD to miss speech entirely.
-    await room.localParticipant.setMicrophoneEnabled(true, {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      sampleRate: 48000,
-      channelCount: 1,
-    });
-    console.log('[Maryam] Microphone enabled');
-
-    // Confirm mic track is actually published
-    const micTrack = room.localParticipant.getTrackPublication(
-      LivekitClient.Track.Source.Microphone
-    );
-    if (micTrack && micTrack.track) {
-      console.log('[Maryam] Mic track published successfully. Muted:', micTrack.isMuted);
-    } else {
-      console.error('[Maryam] Mic track NOT published — user audio will not reach Maryam');
-    }
+    // ── Start with mic MUTED ─────────────────────────────────
+    // The agent greets first (via lk.chat text → agent-generated audio).
+    // The user's mic is not published at all until they press Unmute,
+    // which prevents ambient noise from cutting off the greeting and
+    // keeps the initial flow from breaking. The Unmute handler publishes
+    // the track with the proper constraints (48kHz mono) at that point.
+    console.log('[Maryam] Mic starting muted — user will press Unmute to speak');
 
     maryamConnected = true;
     maryamReconnectAttempts = 0; // successful connect resets the backoff counter
 
-    // Update button to connected state
+    // Update button to connected + muted state.
+    // "muted" class stays on micBtn so the badge reflects the true state.
     if (micBtn) {
-      micBtn.classList.remove('connecting', 'error', 'muted');
-      micBtn.classList.add('connected');
-      setMicIcon(micBtn, '🎤');
+      micBtn.classList.remove('connecting', 'error');
+      micBtn.classList.add('connected', 'muted');
+      setMicIcon(micBtn, '🔇');
       micBtn.disabled = false;
-      micBtn.title = 'Maryam is listening — click to view status';
+      micBtn.title = 'Click to view Maryam status';
     }
 
-    setStatus('Maryam is ready — start speaking', true);
-    setActivity('connected');
+    // Sync the panel Mute/Unmute button to the initial muted state on
+    // every connect (including reconnects) so it is never out of sync.
+    const muteBtnSync = document.getElementById('maryam-mute-btn');
+    if (muteBtnSync) {
+      muteBtnSync.textContent = '🔊 Unmute';
+      muteBtnSync.classList.add('is-muted');
+    }
+
+    setStatus('Maryam is ready — press Unmute to speak', true);
+    setActivity('muted');
 
     // Tell the agent what page it's on — critical after guided
     // navigation so it resumes the flow instead of guessing.
